@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音頻檢測 API 測試</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+        }
+        
+        .test-section h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        
+        input, button, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .info {
+            background: #cce7ff;
+            border: 1px solid #99d3ff;
+            color: #003d66;
+        }
+        
+        .file-list {
+            margin: 10px 0;
+        }
+        
+        .file-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            border: 1px solid #e9ecef;
+        }
+        
+        .file-item:hover {
+            background: #e9ecef;
+        }
+        
+        .file-item.selected {
+            background: #007bff;
+            color: white;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 音頻檢測 API 測試工具</h1>
+        
+        <!-- 獲取文件列表 -->
+        <div class="test-section">
+            <h3>📁 步驟 1: 獲取上傳文件列表</h3>
+            <button onclick="getFileList()">獲取文件列表</button>
+            <div id="fileListResult" class="result"></div>
+            <div id="fileList" class="file-list"></div>
+        </div>
+        
+        <!-- 音頻檢測 -->
+        <div class="test-section">
+            <h3>🔍 步驟 2: 音頻適用性檢測</h3>
+            <p>選擇上面的文件，或手動輸入檔名：</p>
+            <input type="text" id="fileName" placeholder="例如: 我有一支槍.wav" />
+            <button onclick="checkAudio()">完整檢測</button>
+            <button onclick="quickCheckAudio()">快速檢測</button>
+            <div id="checkResult" class="result"></div>
+        </div>
+        
+        <!-- TTS 測試 -->
+        <div class="test-section">
+            <h3>🎤 步驟 3: TTS 語音合成測試</h3>
+            <input type="text" id="ttsText" placeholder="輸入要轉換的文字..." value="你好，這是聲音克隆測試" />
+            <input type="text" id="referenceAudio" placeholder="參考音頻檔名 (可選)" />
+            <input type="text" id="referenceText" placeholder="參考音頻對應文字 (可選)" />
+            <button onclick="testTTS()">生成語音</button>
+            <div id="ttsResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = '';
+        
+        // 獲取文件列表
+        async function getFileList() {
+            try {
+                showResult('fileListResult', '⏳ 正在獲取文件列表...', 'info');
+                
+                const response = await fetch('/uploads');
+                const html = await response.text();
+                
+                // 簡單解析 HTML 中的文件連結
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const links = doc.querySelectorAll('a');
+                const files = [];
+                
+                links.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href && !href.startsWith('/') && href !== '../') {
+                        files.push(href);
+                    }
+                });
+                
+                if (files.length === 0) {
+                    showResult('fileListResult', '📂 uploads 目錄是空的', 'info');
+                    document.getElementById('fileList').innerHTML = '';
+                } else {
+                    showResult('fileListResult', `✅ 找到 ${files.length} 個文件`, 'success');
+                    displayFileList(files);
+                }
+                
+            } catch (error) {
+                showResult('fileListResult', `❌ 獲取文件列表失敗: ${error.message}`, 'error');
+            }
+        }
+        
+        // 顯示文件列表
+        function displayFileList(files) {
+            const container = document.getElementById('fileList');
+            container.innerHTML = '';
+            
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.textContent = file;
+                item.onclick = () => selectFile(file, item);
+                container.appendChild(item);
+            });
+        }
+        
+        // 選擇文件
+        function selectFile(fileName, element) {
+            // 移除其他選中狀態
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // 設置選中狀態
+            element.classList.add('selected');
+            selectedFile = fileName;
+            document.getElementById('fileName').value = fileName;
+        }
+        
+        // 音頻檢測
+        async function checkAudio() {
+            const fileName = document.getElementById('fileName').value.trim();
+            
+            if (!fileName) {
+                showResult('checkResult', '❌ 請輸入文件名', 'error');
+                return;
+            }
+            
+            try {
+                showResult('checkResult', '🔍 正在檢測音頻...', 'info');
+                
+                const response = await fetch('/api/audio/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: fileName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = result.canUse ? '✅ 適合聲音克隆' : '❌ 不適合聲音克隆';
+                    message += `\n原因: ${result.reason}`;
+                    
+                    if (result.details) {
+                        message += '\n\n詳細信息:';
+                        message += `\n時長: ${result.details.duration?.toFixed(1)}秒`;
+                        message += `\n採樣率: ${result.details.sample_rate}Hz`;
+                        message += `\n聲道: ${result.details.channels}`;
+                        if (result.details.volume_db !== null) {
+                            message += `\n音量: ${result.details.volume_db?.toFixed(1)}dB`;
+                        }
+                        if (result.details.qualityNotes) {
+                            message += '\n\n質量評估:';
+                            result.details.qualityNotes.forEach(note => {
+                                message += `\n  ${note}`;
+                            });
+                        }
+                    }
+                    
+                    showResult('checkResult', message, result.canUse ? 'success' : 'error');
+                } else {
+                    showResult('checkResult', `❌ 檢測失敗: ${result.message}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult('checkResult', `❌ 請求失敗: ${error.message}`, 'error');
+            }
+        }
+        
+        // 快速檢測
+        async function quickCheckAudio() {
+            const fileName = document.getElementById('fileName').value.trim();
+            
+            if (!fileName) {
+                showResult('checkResult', '❌ 請輸入文件名', 'error');
+                return;
+            }
+            
+            try {
+                showResult('checkResult', '⚡ 快速檢測中...', 'info');
+                
+                const response = await fetch('/api/audio/quick-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: fileName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = `${result.hasAudio ? '✅' : '❌'} ${result.message}`;
+                    
+                    if (result.duration) {
+                        message += `\n時長: ${result.duration.toFixed(1)}秒`;
+                    }
+                    if (result.sample_rate) {
+                        message += `\n採樣率: ${result.sample_rate}Hz`;
+                    }
+                    
+                    showResult('checkResult', message, result.hasAudio && result.canUse ? 'success' : 'error');
+                } else {
+                    showResult('checkResult', `❌ 檢測失敗: ${result.message}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult('checkResult', `❌ 請求失敗: ${error.message}`, 'error');
+            }
+        }
+        
+        // TTS 測試
+        async function testTTS() {
+            const text = document.getElementById('ttsText').value.trim();
+            const referenceAudio = document.getElementById('referenceAudio').value.trim();
+            const referenceText = document.getElementById('referenceText').value.trim();
+            
+            if (!text) {
+                showResult('ttsResult', '❌ 請輸入要轉換的文字', 'error');
+                return;
+            }
+            
+            try {
+                showResult('ttsResult', '🎤 正在生成語音...', 'info');
+                
+                const voiceConfig = {};
+                if (referenceAudio && referenceText) {
+                    voiceConfig.reference_audio = `/uploads/${referenceAudio}`;
+                    voiceConfig.reference_text = referenceText;
+                }
+                
+                const response = await fetch('/api/tts/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, voiceConfig })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let message = '✅ 語音生成成功！\n';
+                    message += `文件: ${result.filename}\n`;
+                    message += `大小: ${(result.size / 1024).toFixed(1)} KB`;
+                    
+                    // 創建音頻播放器
+                    const audioHtml = `
+                        <audio controls style="width: 100%; margin-top: 10px;">
+                            <source src="${result.audioUrl}" type="audio/wav">
+                            您的瀏覽器不支持音頻播放。
+                        </audio>
+                    `;
+                    
+                    showResult('ttsResult', message + audioHtml, 'success');
+                } else {
+                    showResult('ttsResult', `❌ 生成失敗: ${result.message}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult('ttsResult', `❌ 請求失敗: ${error.message}`, 'error');
+            }
+        }
+        
+        // 顯示結果
+        function showResult(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `result ${type}`;
+            
+            if (message.includes('<audio')) {
+                // 包含 HTML 內容
+                const parts = message.split('<audio');
+                element.innerHTML = `<pre>${parts[0]}</pre><audio${parts[1]}`;
+            } else {
+                element.innerHTML = `<pre>${message}</pre>`;
+            }
+            
+            element.style.display = 'block';
+        }
+        
+        // 頁面載入時自動獲取文件列表
+        window.onload = function() {
+            getFileList();
+        };
+    </script>
+</body>
+</html>

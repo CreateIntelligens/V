@@ -1,0 +1,7 @@
+:root {
+  --td-brand-color-hover: #5f64fd !important;
+  --td-brand-color: #434af9 !important;
+  --td-brand-color-active: #434af9 !important;
+
+  --td-radius-default: 4px !important;
+}

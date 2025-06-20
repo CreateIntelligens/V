@@ -1,0 +1,157 @@
+import { users, models, generatedContent, type User, type InsertUser, type Model, type InsertModel, type GeneratedContent, type InsertGeneratedContent } from "@shared/schema";
+
+export interface IStorage {
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  
+  // Model operations
+  getModels(): Promise<Model[]>;
+  getModel(id: number): Promise<Model | undefined>;
+  createModel(model: InsertModel): Promise<Model>;
+  updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined>;
+  deleteModel(id: number): Promise<boolean>;
+  
+  // Generated content operations
+  getGeneratedContent(): Promise<GeneratedContent[]>;
+  getGeneratedContentByModel(modelId: number): Promise<GeneratedContent[]>;
+  createGeneratedContent(content: InsertGeneratedContent): Promise<GeneratedContent>;
+  updateGeneratedContent(id: number, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined>;
+}
+
+export class MemStorage implements IStorage {
+  private users: Map<number, User>;
+  private models: Map<number, Model>;
+  private generatedContent: Map<number, GeneratedContent>;
+  private currentUserId: number;
+  private currentModelId: number;
+  private currentContentId: number;
+
+  constructor() {
+    this.users = new Map();
+    this.models = new Map();
+    this.generatedContent = new Map();
+    this.currentUserId = 1;
+    this.currentModelId = 1;
+    this.currentContentId = 1;
+    
+    // Add some sample models
+    this.initializeSampleData();
+  }
+
+  private initializeSampleData() {
+    const sampleModels: Model[] = [
+      {
+        id: this.currentModelId++,
+        name: "溫柔女聲",
+        type: "voice",
+        language: "zh-TW",
+        description: "溫和親切的女性聲音，適合客服和教學內容",
+        status: "ready",
+        voiceSettings: JSON.stringify({ pitch: 50, speed: 60, emotion: "gentle" }),
+        characterSettings: null,
+        trainingFiles: ["sample_voice_1.mp3", "sample_voice_2.mp3"],
+        createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: this.currentModelId++,
+        name: "活潑主播",
+        type: "character",
+        language: "zh-TW",
+        description: "年輕活潑的女性角色，適合娛樂和推廣內容",
+        status: "ready",
+        voiceSettings: null,
+        characterSettings: JSON.stringify({ age: "young", gender: "female", style: "energetic" }),
+        trainingFiles: ["character_data_1.zip", "character_data_2.zip"],
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    ];
+    
+    sampleModels.forEach(model => this.models.set(model.id, model));
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.username === username,
+    );
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = this.currentUserId++;
+    const user: User = { ...insertUser, id };
+    this.users.set(id, user);
+    return user;
+  }
+
+  async getModels(): Promise<Model[]> {
+    return Array.from(this.models.values()).sort((a, b) => 
+      new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+    );
+  }
+
+  async getModel(id: number): Promise<Model | undefined> {
+    return this.models.get(id);
+  }
+
+  async createModel(insertModel: InsertModel): Promise<Model> {
+    const id = this.currentModelId++;
+    const model: Model = { 
+      ...insertModel, 
+      id,
+      createdAt: new Date(),
+    };
+    this.models.set(id, model);
+    return model;
+  }
+
+  async updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined> {
+    const existing = this.models.get(id);
+    if (!existing) return undefined;
+    
+    const updated = { ...existing, ...updates };
+    this.models.set(id, updated);
+    return updated;
+  }
+
+  async deleteModel(id: number): Promise<boolean> {
+    return this.models.delete(id);
+  }
+
+  async getGeneratedContent(): Promise<GeneratedContent[]> {
+    return Array.from(this.generatedContent.values()).sort((a, b) => 
+      new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+    );
+  }
+
+  async getGeneratedContentByModel(modelId: number): Promise<GeneratedContent[]> {
+    return Array.from(this.generatedContent.values())
+      .filter(content => content.modelId === modelId)
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  }
+
+  async createGeneratedContent(insertContent: InsertGeneratedContent): Promise<GeneratedContent> {
+    const id = this.currentContentId++;
+    const content: GeneratedContent = { 
+      ...insertContent, 
+      id,
+      createdAt: new Date(),
+    };
+    this.generatedContent.set(id, content);
+    return content;
+  }
+
+  async updateGeneratedContent(id: number, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined> {
+    const existing = this.generatedContent.get(id);
+    if (!existing) return undefined;
+    
+    const updated = { ...existing, ...updates };
+    this.generatedContent.set(id, updated);
+    return updated;
+  }
+}
+
+export const storage = new MemStorage();

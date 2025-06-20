@@ -1,0 +1,91 @@
+networks:
+  ai_network:
+    driver: bridge
+
+services:
+  # Web Vue 前端服務
+  heygem-web-vue:
+    build: .
+    container_name: heygem-web-vue
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - FACE2FACE_URL=http://heygem-gen-video:8383/easy
+      - TTS_URL=http://heygem-tts:8080
+      - ASR_URL=http://heygem-asr:10095
+    volumes:
+      # 整包掛載 - 程式碼 + 資料
+      - .:/app                              # 整個 web-vue 目錄
+      - /app/node_modules                   # 排除 node_modules
+      - ../data:/app/data                   # 專案數據目錄
+    networks:
+      - ai_network
+    depends_on:
+      - heygem-gen-video
+      - heygem-tts
+      - heygem-asr
+    restart: unless-stopped
+    command: npm start
+
+  # TTS 語音合成服務
+  heygem-tts:
+    image: guiji2025/fish-speech-ziming
+    container_name: heygem-tts
+    restart: always
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,graphics,utility,video,display
+    ports:
+      - '18180:8080'
+    volumes:
+      - ../data/voice:/code/data
+    command: /bin/bash -c "/opt/conda/envs/python310/bin/python3 tools/api_server.py --listen 0.0.0.0:8080"
+    networks:
+      - ai_network
+
+  # ASR 語音識別服務
+  heygem-asr:
+    image: guiji2025/fun-asr
+    container_name: heygem-asr
+    restart: always
+    runtime: nvidia
+    privileged: true
+    working_dir: /workspace/FunASR/runtime
+    ports:
+      - '10095:10095'
+    command: sh /run.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai_network
+
+  # 影片生成服務
+  heygem-gen-video:
+    image: guiji2025/heygem.ai
+    container_name: heygem-gen-video
+    restart: always
+    runtime: nvidia
+    privileged: true
+    volumes:
+      - ../data/face2face:/code/data
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    shm_size: '8g'
+    ports:
+      - '8383:8383'
+    command: python /code/app_local.py
+    networks:
+      - ai_network

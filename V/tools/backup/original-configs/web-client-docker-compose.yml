@@ -1,0 +1,96 @@
+# HeyGem 數字人生成器 - 完整服務組合
+# 包含 TTS、ASR、影片生成和 Web 客戶端
+
+networks:
+  ai_network:
+    driver: bridge
+
+services:
+  # TTS 語音合成服務
+  heygem-tts:
+    image: guiji2025/fish-speech-ziming
+    container_name: heygem-tts
+    restart: always
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,graphics,utility,video,display
+    ports:
+      - '18180:8080'
+    volumes:
+      - ../data/voice:/code/data
+    command: /bin/bash -c "/opt/conda/envs/python310/bin/python3 tools/api_server.py --listen 0.0.0.0:8080"
+    networks:
+      - ai_network
+
+  # ASR 語音識別服務
+  heygem-asr:
+    image: guiji2025/fun-asr
+    container_name: heygem-asr
+    restart: always
+    runtime: nvidia
+    privileged: true
+    working_dir: /workspace/FunASR/runtime
+    ports:
+      - '10095:10095'
+    command: sh /run.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai_network
+
+  # 影片生成服務
+  heygem-gen-video:
+    image: guiji2025/heygem.ai
+    container_name: heygem-gen-video
+    restart: always
+    runtime: nvidia
+    privileged: true
+    volumes:
+      - ../data/face2face:/code/data
+      - shared_files:/code/shared  # 共享文件存儲
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    shm_size: '8g'
+    ports:
+      - '8383:8383'
+    command: python /code/app_local.py
+    networks:
+      - ai_network
+
+  # Web 客戶端服務 (Streamlit 界面)
+  heygem-web-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: heygem-web-client
+    restart: always
+    environment:
+      - DOCKER_ENV=true
+    ports:
+      - '8501:8501'
+    depends_on:
+      - heygem-tts
+      - heygem-asr
+      - heygem-gen-video
+    networks:
+      - ai_network
+    volumes:
+      # 可選：掛載本地目錄以便開發時實時更新
+      # - .:/app
+      # 共享文件存儲
+      - shared_files:/app/shared
+
+volumes:
+  shared_files:
+    driver: local

@@ -1,0 +1,107 @@
+node_modules
+dist
+out
+.idea
+.DS_Store
+*.log*
+uploads
+.env
+
+# 大型檔案和暫存目錄
+data/face2face/temp/
+data/face2face/result/
+data/voice/origin_audio/
+tools/backup/resources/ffmpeg/
+tools/backup/build/
+tools/backup/resources/
+
+# 模型檔案 (通常很大)
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+*.h5
+*.pkl
+*.pickle
+
+# 音頻/視頻檔案
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.mkv
+*.webm
+*.m4v
+*.mp3
+*.wav
+*.aac
+*.ogg
+*.m4a
+*.wma
+*.aiff
+
+# 壓縮檔案
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.dmg
+*.iso
+
+# 執行檔
+*.exe
+*.dll
+*.so
+
+# Python 相關
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 暫存和快取
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+ENV/
+env/
+
+# 編輯器相關
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# 系統檔案
+Thumbs.db
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# 大型資料目錄
+data/database/
