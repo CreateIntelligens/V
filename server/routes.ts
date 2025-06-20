@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertModelSchema, insertGeneratedContentSchema } from "@shared/schema";
@@ -11,12 +11,16 @@ const upload = multer({
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: any, file: any, cb: any) => {
     const allowedTypes = ['.mp3', '.wav', '.flac', '.zip', '.png', '.jpg', '.jpeg'];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowedTypes.includes(ext));
   }
 });
+
+interface MulterRequest extends Request {
+  files?: Express.Multer.File[];
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Model routes
@@ -80,13 +84,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // File upload route
-  app.post("/api/upload", upload.array('files'), async (req, res) => {
+  app.post("/api/upload", upload.array('files'), async (req: any, res) => {
     try {
       if (!req.files || !Array.isArray(req.files)) {
         return res.status(400).json({ error: "No files uploaded" });
       }
       
-      const files = req.files.map(file => ({
+      const files = req.files.map((file: any) => ({
         originalName: file.originalname,
         filename: file.filename,
         size: file.size,
