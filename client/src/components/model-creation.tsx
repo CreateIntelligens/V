@@ -17,12 +17,14 @@ export function ModelCreation() {
   const [activeTab, setActiveTab] = useState("audio");
   const [audioModel, setAudioModel] = useState({
     name: "",
+    provider: "heygem",
     language: "zh-TW",
     pitch: 50,
     speed: 60,
   });
   const [characterModel, setCharacterModel] = useState({
     name: "",
+    provider: "heygem", // 人物模特目前只支持 heygem
     language: "zh-TW",
     age: "young",
     gender: "female",
@@ -45,8 +47,8 @@ export function ModelCreation() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/models"] });
       // Reset form
-      setAudioModel({ name: "", language: "zh-TW", pitch: 50, speed: 60 });
-      setCharacterModel({ name: "", language: "zh-TW", age: "young", gender: "female", style: "energetic" });
+      setAudioModel({ name: "", provider: "heygem", language: "zh-TW", pitch: 50, speed: 60 });
+      setCharacterModel({ name: "", provider: "heygem", language: "zh-TW", age: "young", gender: "female", style: "energetic" });
       setTrainingFiles([]);
     },
     onError: () => {
@@ -63,6 +65,7 @@ export function ModelCreation() {
     const modelData: InsertModel = {
       name: isAudio ? audioModel.name : characterModel.name,
       type: isAudio ? "voice" : "character",
+      provider: isAudio ? audioModel.provider : characterModel.provider,
       language: isAudio ? audioModel.language : characterModel.language,
       description: `${isAudio ? '聲音' : '人物'}模特`,
       status: "training",
@@ -160,6 +163,19 @@ export function ModelCreation() {
                       />
                     </div>
                     <div>
+                      <Label>模型供應商</Label>
+                      <Select value={audioModel.provider} onValueChange={(value) => setAudioModel(prev => ({ ...prev, provider: value }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="heygem">HeyGem (自訓練)</SelectItem>
+                          <SelectItem value="edgetts">EdgeTTS (微軟)</SelectItem>
+                          <SelectItem value="minimax">MiniMax</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <Label>語言設定</Label>
                       <Select value={audioModel.language} onValueChange={(value) => setAudioModel(prev => ({ ...prev, language: value }))}>
                         <SelectTrigger>
@@ -243,6 +259,17 @@ export function ModelCreation() {
                         value={characterModel.name}
                         onChange={(e) => setCharacterModel(prev => ({ ...prev, name: e.target.value }))}
                       />
+                    </div>
+                    <div>
+                      <Label>模型供應商</Label>
+                      <Select value={characterModel.provider} onValueChange={(value) => setCharacterModel(prev => ({ ...prev, provider: value }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="heygem">HeyGem (目前唯一支持)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <Label>語言設定</Label>

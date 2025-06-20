@@ -12,6 +12,7 @@ export const models = pgTable("models", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   type: text("type").notNull(), // 'voice' or 'character'
+  provider: text("provider").notNull().default("heygem"), // 'heygem', 'edgetts', 'minimax'
   language: text("language").notNull(),
   description: text("description"),
   status: text("status").notNull().default("training"), // 'training', 'ready', 'failed'

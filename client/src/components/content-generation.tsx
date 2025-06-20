@@ -18,8 +18,10 @@ interface ContentGenerationProps {
 
 export function ContentGeneration({ models }: ContentGenerationProps) {
   const [inputText, setInputText] = useState("");
-  const [selectedModelId, setSelectedModelId] = useState<string>("");
+  const [selectedVoiceModelId, setSelectedVoiceModelId] = useState<string>("");
+  const [selectedCharacterModelId, setSelectedCharacterModelId] = useState<string>("");
   const [emotion, setEmotion] = useState("neutral");
+  const [contentType, setContentType] = useState<"audio" | "video">("audio");
   const [generatingAudio, setGeneratingAudio] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -30,6 +32,39 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
   const queryClient = useQueryClient();
 
   const voiceModels = models.filter(m => m.type === "voice" && m.status === "ready");
+  const characterModels = models.filter(m => m.type === "character" && m.status === "ready");
+  
+  // 預設模版選項
+  const presetTemplates = [
+    {
+      id: "news",
+      name: "新聞播報",
+      text: "今天是{date}，歡迎收看新聞播報。以下是今天的重要新聞：",
+      emotion: "professional",
+      description: "適合新聞、播報類內容"
+    },
+    {
+      id: "product",
+      name: "產品介紹",
+      text: "大家好！今天我要為大家介紹一款全新的產品，它具有以下特色：",
+      emotion: "energetic",
+      description: "適合產品展示、銷售推廣"
+    },
+    {
+      id: "education",
+      name: "教學課程",
+      text: "歡迎來到今天的課程。在這堂課中，我們將學習到：",
+      emotion: "gentle",
+      description: "適合教學、培訓內容"
+    },
+    {
+      id: "greeting",
+      name: "歡迎致詞",
+      text: "歡迎大家的到來！我是您的專屬AI助手，很高興為您服務。",
+      emotion: "happy",
+      description: "適合歡迎、問候場景"
+    },
+  ];
 
   const generateAudioMutation = useMutation({
     mutationFn: async (data: InsertGeneratedContent) => {
@@ -107,17 +142,17 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
   });
 
   const handleGenerateAudio = () => {
-    if (!inputText || !selectedModelId) {
+    if (!inputText || !selectedVoiceModelId) {
       toast({
         title: "請填寫完整信息",
-        description: "請輸入文本並選擇模特",
+        description: "請輸入文本並選擇聲音模特",
         variant: "destructive",
       });
       return;
     }
 
     generateAudioMutation.mutate({
-      modelId: parseInt(selectedModelId),
+      modelId: parseInt(selectedVoiceModelId),
       inputText,
       emotion,
       type: "audio",
@@ -125,21 +160,26 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
   };
 
   const handleGenerateVideo = () => {
-    if (!inputText || !selectedModelId) {
+    if (!inputText || !selectedVoiceModelId || !selectedCharacterModelId) {
       toast({
         title: "請填寫完整信息",
-        description: "請輸入文本並選擇模特",
+        description: "請輸入文本並選擇聲音模特和人物模特",
         variant: "destructive",
       });
       return;
     }
 
     generateVideoMutation.mutate({
-      modelId: parseInt(selectedModelId),
+      modelId: parseInt(selectedCharacterModelId), // 使用人物模特ID
       inputText,
       emotion,
       type: "video",
     });
+  };
+
+  const handlePresetSelect = (preset: typeof presetTemplates[0]) => {
+    setInputText(preset.text.replace("{date}", new Date().toLocaleDateString()));
+    setEmotion(preset.emotion);
   };
 
   return (
@@ -149,73 +189,133 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
           <h3 className="text-lg font-semibold text-gray-900 mb-6">內容生成</h3>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="inputText">輸入文本</Label>
-                  <Textarea
-                    id="inputText"
-                    placeholder="輸入要轉換的文本內容..."
-                    rows={6}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    className="resize-none"
-                  />
+            <div className="space-y-6">
+              {/* 預設模版 */}
+              <div>
+                <Label className="text-base font-semibold">快速模版</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {presetTemplates.map((preset) => (
+                    <Card
+                      key={preset.id}
+                      className="cursor-pointer hover:shadow-md transition-shadow border-2 hover:border-primary/50"
+                      onClick={() => handlePresetSelect(preset)}
+                    >
+                      <CardContent className="p-4">
+                        <h4 className="font-medium text-gray-900 mb-1">{preset.name}</h4>
+                        <p className="text-xs text-gray-600">{preset.description}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-                
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Label className="text-sm text-gray-600">選擇模特:</Label>
-                    <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="選擇模特" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {voiceModels.map((model) => (
-                          <SelectItem key={model.id} value={model.id.toString()}>
-                            {model.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Label className="text-sm text-gray-600">情感:</Label>
-                    <Select value={emotion} onValueChange={setEmotion}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="neutral">中性</SelectItem>
-                        <SelectItem value="happy">開心</SelectItem>
-                        <SelectItem value="sad">悲傷</SelectItem>
-                        <SelectItem value="excited">興奮</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+              </div>
+
+              {/* 文本輸入 */}
+              <div>
+                <Label htmlFor="inputText">輸入文本</Label>
+                <Textarea
+                  id="inputText"
+                  placeholder="輸入要轉換的文本內容，或點擊上方模版快速填入..."
+                  rows={6}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  className="resize-none mt-2"
+                />
+              </div>
+              
+              {/* 聲音模特選擇 */}
+              <div>
+                <Label className="text-base font-semibold">聲音模特</Label>
+                <Select value={selectedVoiceModelId} onValueChange={setSelectedVoiceModelId}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="選擇聲音模特" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {voiceModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id.toString()}>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            model.provider === "heygem" 
+                              ? "bg-blue-100 text-blue-700"
+                              : model.provider === "edgetts"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-purple-100 text-purple-700"
+                          }`}>
+                            {(model.provider || "heygem").toUpperCase()}
+                          </span>
+                          <span>{model.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 人物模特選擇（僅視頻需要） */}
+              <div>
+                <Label className="text-base font-semibold">人物模特 (視頻生成用)</Label>
+                <Select value={selectedCharacterModelId} onValueChange={setSelectedCharacterModelId}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="選擇人物模特" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {characterModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id.toString()}>
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2 py-1 rounded text-xs bg-orange-100 text-orange-700">
+                            HEYGEM
+                          </span>
+                          <span>{model.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* 情感設置 */}
+              <div>
+                <Label className="text-base font-semibold">情感表達</Label>
+                <Select value={emotion} onValueChange={setEmotion}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="neutral">中性</SelectItem>
+                    <SelectItem value="happy">開心</SelectItem>
+                    <SelectItem value="professional">專業</SelectItem>
+                    <SelectItem value="gentle">溫和</SelectItem>
+                    <SelectItem value="energetic">活力</SelectItem>
+                    <SelectItem value="excited">興奮</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <div>
               <div className="space-y-4">
-                <div className="flex space-x-3">
-                  <Button 
-                    className="flex-1" 
-                    onClick={handleGenerateAudio}
-                    disabled={generatingAudio || generateAudioMutation.isPending}
-                  >
-                    <MicOff className="mr-2 h-4 w-4" />
-                    {generatingAudio ? "生成中..." : "生成語音"}
-                  </Button>
-                  <Button 
-                    className="flex-1 bg-purple-500 hover:bg-purple-600" 
-                    onClick={handleGenerateVideo}
-                    disabled={generatingVideo || generateVideoMutation.isPending}
-                  >
-                    <Video className="mr-2 h-4 w-4" />
-                    {generatingVideo ? "生成中..." : "生成影片"}
-                  </Button>
+                <div className="space-y-3">
+                  <div className="text-sm text-gray-600">
+                    <p>• 音頻生成：僅需選擇聲音模特</p>
+                    <p>• 視頻生成：需要選擇聲音模特和人物模特</p>
+                  </div>
+                  <div className="flex space-x-3">
+                    <Button 
+                      className="flex-1" 
+                      onClick={handleGenerateAudio}
+                      disabled={generatingAudio || generateAudioMutation.isPending || !selectedVoiceModelId}
+                    >
+                      <MicOff className="mr-2 h-4 w-4" />
+                      {generatingAudio ? "生成中..." : "生成音頻"}
+                    </Button>
+                    <Button 
+                      className="flex-1 bg-purple-500 hover:bg-purple-600" 
+                      onClick={handleGenerateVideo}
+                      disabled={generatingVideo || generateVideoMutation.isPending || !selectedVoiceModelId || !selectedCharacterModelId}
+                    >
+                      <Video className="mr-2 h-4 w-4" />
+                      {generatingVideo ? "生成中..." : "生成視頻"}
+                    </Button>
+                  </div>
                 </div>
 
                 {generatingAudio && (

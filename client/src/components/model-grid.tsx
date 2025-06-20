@@ -102,9 +102,20 @@ export function ModelGrid({ models }: ModelGridProps) {
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">{model.name}</h4>
                 <p className="text-sm text-gray-600 mb-3">{model.description}</p>
-                <div className="flex items-center justify-between text-xs text-gray-500">
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
                   <span>{getModelTypeText(model.type)} | {model.language}</span>
                   <span>{formatDate(model.createdAt)}</span>
+                </div>
+                <div className="mb-3">
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    (model.provider || "heygem") === "heygem" 
+                      ? "bg-blue-100 text-blue-700"
+                      : (model.provider || "heygem") === "edgetts"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-purple-100 text-purple-700"
+                  }`}>
+                    {((model.provider || "heygem")).toUpperCase()}
+                  </span>
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <div className="flex space-x-2">
