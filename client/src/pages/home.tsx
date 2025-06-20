@@ -44,7 +44,7 @@ export default function Home() {
             </Link>
             <Link href="/video-editor">
               <Button variant="outline" size="lg" className="px-8">
-                視頻編輯
+                開始生成內容
               </Button>
             </Link>
           </div>
