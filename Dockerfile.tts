@@ -1,0 +1,26 @@
+# TTS 服務的 Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 複製 TTS 相關文件
+COPY V/tts-extracted/requirements.txt ./requirements.txt
+COPY V/tts-extracted/simple_tts_server.py ./simple_tts_server.py
+COPY V/tts-extracted/schema.py ./schema.py
+
+# 安裝 Python 依賴
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 創建數據目錄
+RUN mkdir -p data
+
+# 暴露端口
+EXPOSE 8080
+
+# 啟動 TTS 服務
+CMD ["python", "simple_tts_server.py", "--host", "0.0.0.0", "--port", "8080"]

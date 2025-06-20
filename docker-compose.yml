@@ -1,0 +1,63 @@
+version: '3.8'
+
+networks:
+  ai_network:
+    driver: bridge
+
+services:
+  # AI Model Studio Web 應用
+  ai-model-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-model-studio
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - TTS_URL=http://tts-server:8080
+      - VIDEO_GEN_URL=http://video-gen:8383
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    networks:
+      - ai_network
+    depends_on:
+      - tts-server
+    restart: unless-stopped
+
+  # TTS 語音合成服務 (簡化版本用於演示)
+  tts-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.tts
+    container_name: tts-server
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./data/voice:/app/data
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+  # PostgreSQL 資料庫 (可選，如果需要持久化存儲)
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-studio-db
+    environment:
+      - POSTGRES_DB=ai_studio
+      - POSTGRES_USER=ai_user
+      - POSTGRES_PASSWORD=ai_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ai_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

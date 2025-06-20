@@ -100,7 +100,12 @@ export class MemStorage implements IStorage {
   async createModel(insertModel: InsertModel): Promise<Model> {
     const id = this.currentModelId++;
     const model: Model = { 
-      ...insertModel, 
+      ...insertModel,
+      description: insertModel.description || null,
+      status: insertModel.status || "training",
+      voiceSettings: insertModel.voiceSettings || null,
+      characterSettings: insertModel.characterSettings || null,
+      trainingFiles: insertModel.trainingFiles || null,
       id,
       createdAt: new Date(),
     };
@@ -136,7 +141,12 @@ export class MemStorage implements IStorage {
   async createGeneratedContent(insertContent: InsertGeneratedContent): Promise<GeneratedContent> {
     const id = this.currentContentId++;
     const content: GeneratedContent = { 
-      ...insertContent, 
+      ...insertContent,
+      status: insertContent.status || "generating",
+      modelId: insertContent.modelId || null,
+      outputPath: insertContent.outputPath || null,
+      emotion: insertContent.emotion || null,
+      duration: insertContent.duration || null,
       id,
       createdAt: new Date(),
     };
