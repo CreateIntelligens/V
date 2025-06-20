@@ -170,8 +170,8 @@ export function ModelCreation() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="heygem">HeyGem (自訓練)</SelectItem>
-                          <SelectItem value="edgetts">EdgeTTS (微軟)</SelectItem>
-                          <SelectItem value="minimax">MiniMax</SelectItem>
+                          <SelectItem value="edgetts">EdgeTTS (微軟預設)</SelectItem>
+                          <SelectItem value="minimax">MiniMax (可訓練+預設)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -95,18 +95,18 @@ export class MemStorage implements IStorage {
         trainingFiles: null,
         createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
       },
-      // Voice Models - MiniMax
+      // Voice Models - MiniMax (both preset and trainable)
       {
         id: this.currentModelId++,
         name: "MiniMax 智能語音",
         type: "voice",
         provider: "minimax",
         language: "zh-CN",
-        description: "MiniMax 高品質中文語音合成",
+        description: "MiniMax 高品質中文語音合成 (自訓練)",
         status: "ready",
         voiceSettings: JSON.stringify({ model: "speech-01", speed: 1.0, vol: 0.8 }),
         characterSettings: null,
-        trainingFiles: null,
+        trainingFiles: ["minimax_custom_voice.wav"],
         createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000),
       },
       // Character Models - HeyGem only
