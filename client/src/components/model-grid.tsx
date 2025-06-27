@@ -72,9 +72,10 @@ export function ModelGrid({ models }: ModelGridProps) {
     }
   };
 
-  // 獲取影片第一幀預覽
-  const getVideoThumbnail = (videoPath: string) => {
-    return `/api/files/${videoPath.replace(/\\/g, '/')}/thumbnail`;
+  // 獲取影片預覽 - 直接使用影片檔案
+  const getVideoPreview = (videoPath: string) => {
+    // 直接使用模特檔案路徑，不需要縮圖 API
+    return `/models/${videoPath}`;
   };
 
   const getModelIcon = (type: string) => {
@@ -179,13 +180,14 @@ export function ModelGrid({ models }: ModelGridProps) {
                 {model.type === "character" && model.trainingFiles && model.trainingFiles.length > 0 && (
                   <div className="mb-3">
                     <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden relative">
-                      <img
-                        src={getVideoThumbnail(model.trainingFiles[0])}
-                        alt="影片預覽"
+                      <video
+                        src={getVideoPreview(model.trainingFiles[0])}
                         className="w-full h-full object-cover"
+                        muted
+                        preload="metadata"
                         onError={(e) => {
-                          // 如果縮圖載入失敗，顯示預設內容
-                          const target = e.target as HTMLImageElement;
+                          // 如果影片載入失敗，顯示預設內容
+                          const target = e.target as HTMLVideoElement;
                           target.style.display = 'none';
                           const parent = target.parentElement;
                           if (parent) {
@@ -202,6 +204,20 @@ export function ModelGrid({ models }: ModelGridProps) {
                               </div>
                             `;
                           }
+                        }}
+                        onMouseEnter={(e) => {
+                          // 滑鼠懸停時播放預覽
+                          const video = e.target as HTMLVideoElement;
+                          video.currentTime = 0;
+                          video.play().catch(() => {
+                            // 播放失敗時忽略錯誤
+                          });
+                        }}
+                        onMouseLeave={(e) => {
+                          // 滑鼠離開時暫停
+                          const video = e.target as HTMLVideoElement;
+                          video.pause();
+                          video.currentTime = 0;
                         }}
                       />
                       <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded flex items-center">

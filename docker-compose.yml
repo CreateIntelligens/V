@@ -37,8 +37,7 @@ services:
     restart: unless-stopped
     ports:
       - "18180:8080"
-    volumes:
-      - ./data/voice:/code/data
+    # 移除過時的 voice 目錄掛載
     command: /bin/bash -c "/opt/conda/envs/python310/bin/python3 tools/api_server.py --listen 0.0.0.0:8080"
     networks:
       - heygem_network
@@ -56,8 +55,17 @@ services:
       - "18203:8083"  # TTS 服務 3
     environment:
       - PYTHONPATH=/app
-    env_file:
-      - ./tts-services/.env  # 載入 TTS 服務專用的環境變數
+      # MiniMax TTS API 設定
+      - MINIMAX_API_KEY=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJNSVMgUkQiLCJVc2VyTmFtZSI6Ik1JUyBSRCIsIkFjY291bnQiOiIiLCJTdWJqZWN0SUQiOiIxOTMwODQzMjQ3ODg2NzMzODg4IiwiUGhvbmUiOiIiLCJHcm91cElEIjoiMTkzMDg0MzI0Nzg4MjUzOTU4NCIsIlBhZ2VOYW1lIjoiIiwiTWFpbCI6Im1pc0BhaWNyZWF0ZTM2MC5jb20iLCJDcmVhdGVUaW1lIjoiMjAyNS0wNi0wNiAxNToxMDoyNyIsIlRva2VuVHlwZSI6MSwiaXNzIjoibWluaW1heCJ9.dPZgibBPgTtJ2D-vIY8IxlNTqOknAYsEnYtq0XaxsEUpt_8gkUOmOQZ0463kXz4JmGAY39ympUBgAXQSrg-TG00BiZHqKqnFr54Xmhr3Fi0WlFJqZBPnzIu6SPJc3TbHc9lXSd_Y68ov758Rs6MVgKYxy_u40MoJOQoP-aS-9RiiiV8LWOlR38Hw74ZZhV3rAHYXKRYPPS1IECaT8dpBMjlKzn4__-Zk7GPUn4Qfz7uG3ly1fw_dYrJZtWHFqWg3Zt5V04R4ky6jrIP3dGL3Kd5kO78eYiYXwmZGfFF6kTsdlhYqYARMbt-6gDQVxmX906hEO4OVUcZAtp4pz7eyCA
+      - MINIMAX_GROUP_ID=1930843247882539584
+      - MINIMAX_BASE_URL=https://api.minimaxi.chat/v1/t2a_v2
+      - MINIMAX_MODEL=speech-02-turbo
+      # ATEN AIVoice TTS API 設定
+      - EUGENES_API_TOKEN=8ecd2f02836f456abf693163c8077965
+      - EUGENES_BASE_URL=https://www.aivoice.com.tw/business/enterprise
+      # 其他設定
+      - DEBUG=true
+      - LOG_LEVEL=INFO
     volumes:
       # 一次性掛載 TTS 服務目錄
       - ./tts-services:/app
@@ -84,9 +92,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    volumes:
-      # 掛載數據目錄
-      - ./data/voice:/code/data
+    # 移除過時的 voice 目錄掛載
     networks:
       - heygem_network
 
