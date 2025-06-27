@@ -13,13 +13,14 @@ const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
-      // 根據檔案類型決定存放目錄
-      if (['.mp3', '.wav', '.flac'].includes(ext)) {
-        cb(null, 'data/audios/');
-      } else if (['.mp4', '.avi', '.mov'].includes(ext)) {
-        cb(null, 'data/videos/');
+      // 統一將上傳的模特檔案存放到 data/models 目錄
+      if (['.mp3', '.wav', '.flac', '.mp4', '.avi', '.mov'].includes(ext)) {
+        const modelsDir = path.join(process.cwd(), 'data', 'models');
+        // 確保目錄存在
+        fs.ensureDirSync(modelsDir);
+        cb(null, modelsDir);
       } else {
-        cb(null, 'data/audios/'); // 預設放音頻目錄
+        cb(null, 'data/models/'); // 預設放模特目錄
       }
     },
     filename: (req, file, cb) => {
@@ -57,21 +58,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // 提供 videos 目錄的靜態訪問
-  app.use('/videos', express.static(path.join(process.cwd(), 'data', 'videos'), {
-    setHeaders: (res: any, filePath: any) => {
-      const ext = path.extname(filePath).toLowerCase();
-      if (ext === '.mp4') {
-        res.setHeader('Content-Type', 'video/mp4');
-      } else if (ext === '.avi') {
-        res.setHeader('Content-Type', 'video/x-msvideo');
-      } else if (ext === '.mov') {
-        res.setHeader('Content-Type', 'video/quicktime');
-      }
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+  // 提供 videos 目錄的靜態訪問 - 同時包含 models 目錄的檔案
+  app.use('/videos', (req: any, res: any, next: any) => {
+    const requestedFile = req.path.substring(1); // 移除開頭的 /
+    
+    // 先嘗試在 videos 目錄中查找
+    const videosPath = path.join(process.cwd(), 'data', 'videos', requestedFile);
+    const modelsPath = path.join(process.cwd(), 'data', 'models', requestedFile);
+    
+    // 檢查檔案是否存在
+    if (fs.existsSync(videosPath)) {
+      // 在 videos 目錄中找到，使用標準靜態服務
+      express.static(path.join(process.cwd(), 'data', 'videos'))(req, res, next);
+    } else if (fs.existsSync(modelsPath)) {
+      // 在 models 目錄中找到，重定向到 models 目錄
+      express.static(path.join(process.cwd(), 'data', 'models'))(req, res, next);
+    } else {
+      // 檔案不存在，使用預設的 videos 目錄處理（會返回 404）
+      express.static(path.join(process.cwd(), 'data', 'videos'))(req, res, next);
     }
-  }));
+  });
+
+  // 設定影片檔案的 Content-Type
+  app.use('/videos', (req: any, res: any, next: any) => {
+    const ext = path.extname(req.path).toLowerCase();
+    if (ext === '.mp4') {
+      res.setHeader('Content-Type', 'video/mp4');
+    } else if (ext === '.avi') {
+      res.setHeader('Content-Type', 'video/x-msvideo');
+    } else if (ext === '.mov') {
+      res.setHeader('Content-Type', 'video/quicktime');
+    }
+    res.setHeader('Accept-Ranges', 'bytes');
+    next();
+  });
 
   // 音頻檔案靜態訪問 - 直接使用 audios 路徑
   app.use('/audios', express.static(path.join(process.cwd(), 'data', 'audios'), {
@@ -85,7 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Content-Type', 'audio/flac');
       }
       res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // CORS 由 nginx 統一處理，避免重複設置
     }
   }));
 
@@ -101,7 +121,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.setHeader('Content-Type', 'audio/flac');
       }
       res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // CORS 由 nginx 統一處理，避免重複設置
+    }
+  }));
+
+  // 模特檔案靜態訪問
+  app.use('/models', express.static(path.join(process.cwd(), 'data', 'models'), {
+    setHeaders: (res: any, filePath: any) => {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === '.mp4') {
+        res.setHeader('Content-Type', 'video/mp4');
+      } else if (ext === '.avi') {
+        res.setHeader('Content-Type', 'video/x-msvideo');
+      } else if (ext === '.mov') {
+        res.setHeader('Content-Type', 'video/quicktime');
+      } else if (ext === '.mp3') {
+        res.setHeader('Content-Type', 'audio/mpeg');
+      } else if (ext === '.wav') {
+        res.setHeader('Content-Type', 'audio/wav');
+      } else if (ext === '.flac') {
+        res.setHeader('Content-Type', 'audio/flac');
+      }
+      res.setHeader('Accept-Ranges', 'bytes');
+      // CORS 由 nginx 統一處理，避免重複設置
     }
   }));
 
@@ -129,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/models/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id; // 保持為字符串
       const model = await storage.getModel(id);
       if (!model) {
         return res.status(404).json({ error: "Model not found" });
@@ -152,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/models/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id; // 保持為字符串
       const updates = req.body;
       const model = await storage.updateModel(id, updates);
       if (!model) {
@@ -166,13 +208,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/models/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id; // 保持為字符串
+      
+      // 先獲取模特資訊，以便刪除對應的檔案
+      const model = await storage.getModel(id);
+      if (!model) {
+        return res.status(404).json({ error: "Model not found" });
+      }
+      
+      // 刪除模特記錄
       const deleted = await storage.deleteModel(id);
       if (!deleted) {
         return res.status(404).json({ error: "Model not found" });
       }
+      
+      // 刪除對應的訓練檔案
+      if (model.trainingFiles && Array.isArray(model.trainingFiles)) {
+        for (const fileName of model.trainingFiles) {
+          try {
+            const filePath = path.join(process.cwd(), 'data', 'models', fileName);
+            if (await fs.pathExists(filePath)) {
+              await fs.remove(filePath);
+              console.log(`🗑️ 已刪除模特檔案: ${filePath}`);
+            } else {
+              console.log(`⚠️ 模特檔案不存在: ${filePath}`);
+            }
+          } catch (fileError) {
+            console.error(`刪除模特檔案失敗: ${fileName}`, fileError);
+            // 檔案刪除失敗不影響模特記錄刪除，繼續執行
+          }
+        }
+      }
+      
       res.json({ success: true });
     } catch (error) {
+      console.error('刪除模特失敗:', error);
       res.status(500).json({ error: "Failed to delete model" });
     }
   });
@@ -241,8 +311,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const content = await storage.createGeneratedContent(contentData);
       
+      // 根據提供商決定音頻格式
+      let audioFormat = "mp3";
+      let audioExtension = ".mp3";
+      
+      // ATEN 服務總是返回 WAV 格式
+      if (contentData.provider === "aten") {
+        audioFormat = "wav";
+        audioExtension = ".wav";
+      }
+      
       // 創建實際的音頻檔案
-      const audioFileName = `audio_${content.id}.mp3`;
+      const audioFileName = `audio_${content.id}${audioExtension}`;
       const audioPath = path.join(process.cwd(), 'data', 'audios', audioFileName);
       
       // 確保目錄存在
@@ -280,8 +360,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               };
               break;
               
-            case "fishtts":
+            case "aten":
               serviceId = "service3";
+              voiceConfig = {
+                voice_name: contentData.ttsModel || "Aaron",
+                pitch: 0,
+                rate: 1.0,
+                volume: 0,
+                silence_scale: 1.0
+              };
+              break;
+              
+            case "fishtts":
+              serviceId = "service4";
               voiceConfig = {
                 voice: contentData.ttsModel || "default"
               };
@@ -308,7 +399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               text: contentData.inputText,
               service: serviceId,
               voice_config: voiceConfig,
-              format: "mp3",
+              format: audioFormat,
               language: "zh"
             })
           });
@@ -387,12 +478,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requestData.referenceAudio = req.file;
       }
       
-      const contentData = insertGeneratedContentSchema.parse({
+      // 確保 modelId 存在
+      if (!requestData.modelId) {
+        return res.status(400).json({
+          success: false,
+          message: "缺少模特 ID",
+          error: "modelId 是必需的參數"
+        });
+      }
+      
+      // 將 modelId 轉換為字符串（支援大數字）
+      const modelId = requestData.modelId.toString();
+      
+      const processedData = {
         ...requestData,
-        modelId: parseInt(requestData.modelId), // 確保 modelId 是數字
+        modelId: modelId,
         type: "video",
-        status: "generating"
-      });
+        status: "generating",
+        // 處理 MiniMax 參數
+        minimaxVolume: requestData.minimaxVolume ? parseFloat(requestData.minimaxVolume) : undefined,
+        minimaxSpeed: requestData.minimaxSpeed ? parseFloat(requestData.minimaxSpeed) : undefined,
+        minimaxPitch: requestData.minimaxPitch ? parseInt(requestData.minimaxPitch) : undefined,
+        // 處理 ATEN 參數
+        atenPitch: requestData.atenPitch ? parseFloat(requestData.atenPitch) : undefined,
+        atenRate: requestData.atenRate ? parseFloat(requestData.atenRate) : undefined,
+        atenVolume: requestData.atenVolume ? parseFloat(requestData.atenVolume) : undefined,
+        atenSilenceScale: requestData.atenSilenceScale ? parseFloat(requestData.atenSilenceScale) : undefined,
+      };
+      
+      const contentData = insertGeneratedContentSchema.parse(processedData);
       
       const content = await storage.createGeneratedContent(contentData);
       
@@ -442,6 +556,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   };
                   break;
                   
+                case "aten":
+                  serviceId = "service3";
+                  voiceConfig = {
+                    voice_name: contentData.ttsModel || "Aaron",
+                    pitch: 0,
+                    rate: 1.0,
+                    volume: 0,
+                    silence_scale: 1.0
+                  };
+                  break;
+                  
                 default:
                   serviceId = "service1";
                   voiceConfig = {
@@ -483,12 +608,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
+          // 根據 modelId 獲取對應的人物模特影片
+          let modelVideoFile = null;
+          let modelVideoUrl = null;
+          
+          try {
+            const model = await storage.getModel(contentData.modelId);
+            if (model && model.trainingFiles && model.trainingFiles.length > 0) {
+              // 使用模特的第一個訓練檔案作為影片來源
+              const trainingFile = model.trainingFiles[0];
+              
+              // 檢查多個可能的位置
+              const possiblePaths = [
+                // 1. 新的統一模特目錄（優先）
+                path.join(process.cwd(), 'data', 'models', trainingFile),
+                // 2. heygem_data 目錄（Vref 標準位置，向後相容）
+                path.join('D:', 'heygem_data', 'face2face', 'temp', trainingFile),
+                // 3. 當前專案的 videos 目錄（向後相容）
+                path.join(process.cwd(), 'data', 'videos', trainingFile),
+                // 4. 如果是已知的預設檔案，直接使用
+                trainingFile === '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4' ? 
+                  path.join('D:', 'heygem_data', 'face2face', 'temp', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4') : null
+              ].filter(Boolean);
+              
+              // 檢查檔案是否存在
+              for (const videoPath of possiblePaths) {
+                if (await fs.pathExists(videoPath)) {
+                  modelVideoFile = trainingFile;
+                  // 根據檔案位置決定 URL
+                  if (videoPath.includes('heygem_data')) {
+                    // 如果在 heygem_data 目錄，需要複製到可訪問的位置或使用檔案路徑
+                    modelVideoUrl = `file://${videoPath}`;
+                  } else {
+                    // 如果在專案目錄，使用 HTTP URL
+                    modelVideoUrl = `http://heygem-web:5000/videos/${trainingFile}`;
+                  }
+                  console.log(`✅ 找到人物模特影片: ${videoPath}`);
+                  break;
+                }
+              }
+              
+              // 如果都沒找到，但有預設檔案可用
+              if (!modelVideoFile) {
+                const defaultVideoPath = path.join('D:', 'heygem_data', 'face2face', 'temp', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4');
+                if (await fs.pathExists(defaultVideoPath)) {
+                  modelVideoFile = '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4';
+                  modelVideoUrl = `file://${defaultVideoPath}`;
+                  console.log(`⚠️ 使用預設人物模特影片: ${defaultVideoPath}`);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('獲取人物模特資訊失敗:', error);
+          }
+          
+          // 如果沒有找到有效的模特影片，返回錯誤
+          if (!modelVideoFile) {
+            throw new Error(`人物模特影片不存在。請確認檔案已上傳到正確位置：D:/heygem_data/face2face/temp/`);
+          }
+          
           // 調用 Face2Face 服務生成影片
-          // 使用現有的視頻檔案，讓 Face2Face 使用視頻本身的音頻
-          const videoFileName = "3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4";
           const face2faceData = {
-            audio_url: `http://heygem-web:5000/videos/${videoFileName}`, // 使用視頻本身的音頻
-            video_url: `http://heygem-web:5000/videos/${videoFileName}`, // 人物模型視頻 URL
+            audio_url: audioUrl || `http://heygem-nginx:8883/videos/${modelVideoFile}`, // 使用生成的音頻或通過 nginx 訪問
+            video_url: `http://heygem-nginx:8883/videos/${modelVideoFile}`, // 人物模型視頻 URL - 通過 nginx 訪問
             code: taskCode,
             chaofen: 0,
             watermark_switch: 0,
@@ -777,66 +959,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const face2faceResult = await face2faceResponse.json();
       console.log(`🎬 Face2Face 查詢回應:`, face2faceResult);
       
-      // 如果任務完成，處理結果檔案
-      if (face2faceResult.code === 10000 && face2faceResult.data.status === 2 && face2faceResult.data.result) {
-        try {
-          const resultFileName = face2faceResult.data.result;
-          const taskCode = face2faceResult.data.code;
+      // 處理任務完成的情況
+      if (face2faceResult.code === 10000) {
+        const taskCode = face2faceResult.data.code;
+        const taskStatus = face2faceResult.data.status;
+        
+        // 從任務代碼中提取內容 ID
+        const contentIdMatch = taskCode.match(/task_(\d+)_/);
+        
+        if (contentIdMatch) {
+          const contentId = contentIdMatch[1];
           
-          // 生成新的檔案名稱
-          const timestamp = Date.now();
-          const newVideoName = `generated_video_${timestamp}.mp4`;
-          const localVideoPath = path.join(process.cwd(), 'data', 'videos', newVideoName);
-          
-          // 確保目錄存在
-          await fs.ensureDir(path.dirname(localVideoPath));
-          
-          // 從 Face2Face 容器複製結果檔案
-          const { exec } = require('child_process');
-          const copyCommand = `docker cp heygem-gen-video:/code/data/temp/${resultFileName} ${localVideoPath}`;
-          
-          exec(copyCommand, async (error: any, stdout: any, stderr: any) => {
-            if (error) {
-              console.error(`檔案複製失敗: ${error}`);
-            } else {
-              console.log(`✅ 影片已複製到: ${localVideoPath}`);
+          // 如果任務完成 (status === 2) 或者 Face2Face 返回 code 10004（任務不存在，可能已完成）
+          if (taskStatus === 2 || face2faceResult.code === 10004) {
+            try {
+              // 檢查是否有結果檔案
+              const { exec } = await import('child_process');
+              const checkCommand = `docker exec heygem-gen-video sh -c "ls -la /code/data/temp/${taskCode}-r.mp4"`;
               
-              // 從任務代碼中提取內容 ID
-              const contentIdMatch = taskCode.match(/task_(\d+)_/);
-              if (contentIdMatch) {
-                const contentId = contentIdMatch[1];
-                
-                // 更新資料庫狀態為完成
-                try {
-                  await storage.updateGeneratedContent(contentId, {
-                    status: "completed",
-                    outputPath: `/videos/${newVideoName}`,
-                    duration: face2faceResult.data.video_duration || 0
+              exec(checkCommand, async (error: any, stdout: any, stderr: any) => {
+                if (!error && stdout.trim()) {
+                  // 找到結果檔案
+                  const resultFileName = `${taskCode}-r.mp4`;
+                  const newVideoName = `generated_video_${contentId}.mp4`;
+                  const localVideoPath = path.join(process.cwd(), 'data', 'videos', newVideoName);
+                  
+                  // 確保目錄存在
+                  await fs.ensureDir(path.dirname(localVideoPath));
+                  
+                  // 複製結果檔案
+                  const copyCommand = `docker cp heygem-gen-video:/code/data/temp/${resultFileName} "${localVideoPath}"`;
+                  
+                  exec(copyCommand, async (copyError: any, copyStdout: any, copyStderr: any) => {
+                    if (copyError) {
+                      console.error(`檔案複製失敗: ${copyError}`);
+                    } else {
+                      console.log(`✅ 影片已複製到: ${localVideoPath}`);
+                      
+                      // 獲取影片時長
+                      let videoDuration = 12; // 預設時長
+                      try {
+                        const ffprobeCommand = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${localVideoPath}"`;
+                        exec(ffprobeCommand, (ffprobeError: any, ffprobeStdout: any) => {
+                          if (!ffprobeError && ffprobeStdout.trim()) {
+                            videoDuration = Math.round(parseFloat(ffprobeStdout.trim()));
+                          }
+                        });
+                      } catch (ffprobeError) {
+                        console.log('無法獲取影片時長，使用預設值');
+                      }
+                      
+                      // 更新資料庫狀態為完成
+                      try {
+                        await storage.updateGeneratedContent(contentId, {
+                          status: "completed",
+                          outputPath: `/videos/${newVideoName}`,
+                          duration: videoDuration
+                        });
+                        console.log(`✅ 資料庫狀態已更新: ${contentId} -> completed`);
+                        
+                        // 更新回應數據
+                        face2faceResult.data.status = 2;
+                        face2faceResult.data.result = resultFileName;
+                        face2faceResult.data.video_url = `/videos/${newVideoName}`;
+                        face2faceResult.data.local_path = localVideoPath;
+                        
+                      } catch (updateError) {
+                        console.error(`資料庫更新失敗: ${updateError}`);
+                      }
+                      
+                      // 清理 Face2Face 臨時檔案
+                      const cleanupCommand = `docker exec heygem-gen-video sh -c "rm -f /code/data/temp/${taskCode}*"`;
+                      exec(cleanupCommand, (cleanupError: any) => {
+                        if (cleanupError) {
+                          console.error(`清理失敗: ${cleanupError}`);
+                        } else {
+                          console.log(`🧹 已清理臨時檔案: ${taskCode}*`);
+                        }
+                      });
+                    }
                   });
-                  console.log(`✅ 資料庫狀態已更新: ${contentId} -> completed`);
-                } catch (updateError) {
-                  console.error(`資料庫更新失敗: ${updateError}`);
-                }
-              }
-              
-              // 清理 Face2Face 臨時檔案
-              const cleanupCommand = `docker exec heygem-gen-video sh -c "rm -f /code/data/temp/${taskCode}*"`;
-              exec(cleanupCommand, (cleanupError: any) => {
-                if (cleanupError) {
-                  console.error(`清理失敗: ${cleanupError}`);
                 } else {
-                  console.log(`🧹 已清理臨時檔案: ${taskCode}*`);
+                  console.log(`⚠️ 未找到結果檔案: ${taskCode}-r.mp4`);
                 }
               });
+              
+            } catch (error) {
+              console.error('處理結果檔案失敗:', error);
             }
-          });
+          }
+        }
+      }
+      
+      // 特殊處理 code 10004 的情況（任務不存在，可能已完成）
+      if (face2faceResult.code === 10004) {
+        const taskCode = code as string;
+        const contentIdMatch = taskCode.match(/task_(\d+)_/);
+        
+        if (contentIdMatch) {
+          const contentId = contentIdMatch[1];
           
-          // 修改回應，提供本地訪問路徑
-          face2faceResult.data.video_url = `/videos/${newVideoName}`;
-          face2faceResult.data.local_path = localVideoPath;
-          
-        } catch (error) {
-          console.error('處理結果檔案失敗:', error);
+          // 檢查資料庫中的狀態
+          try {
+            const content = await storage.getGeneratedContent();
+            const item = content.find(c => c.id === contentId || c.id === parseInt(contentId));
+            
+            if (item && item.status === "completed") {
+              // 如果資料庫中已標記為完成，返回成功狀態
+              face2faceResult.code = 10000;
+              face2faceResult.data = {
+                code: taskCode,
+                status: 2,
+                result: `generated_video_${contentId}.mp4`,
+                video_url: item.outputPath,
+                msg: "任務已完成"
+              };
+            }
+          } catch (error) {
+            console.error('檢查資料庫狀態失敗:', error);
+          }
         }
       }
       
