@@ -1,0 +1,45 @@
+# 環境變數檔案
+.env
+*.env
+!.env.example
+
+# Python 相關
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 虛擬環境
+venv/
+env/
+ENV/
+
+# IDE 設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日誌檔案
+*.log
+logs/
+
+# 暫存檔案
+tmp/
+temp/
+.tmp/
+
+# 音頻檔案 (如果有暫存)
+*.wav
+*.mp3
+*.m4a
+!example_audio.*
+
+# 模型檔案 (如果有下載)
+models/
+checkpoints/
