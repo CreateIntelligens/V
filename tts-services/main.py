@@ -8,11 +8,12 @@ import os
 import sys
 import asyncio
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 import logging
+import json
 
 # 載入環境變數
 try:
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 # 導入自定義 TTS 服務
 from services.edgetts_service import TTSService1
 from services.minimax_service import TTSService2
-from services.eugenes_service import TTSService3
+from services.aten_service import TTSService3
 from services.openai_service import TTSService4
 
 app = FastAPI(
@@ -51,10 +52,14 @@ app.add_middleware(
 
 class TTSRequest(BaseModel):
     text: str
-    service: Optional[str] = "service1"  # service1, service2, service3
-    voice_config: Optional[dict] = {}
-    format: str = "wav"
+    service: Optional[str] = "service1"  # service1, service2, service3, service4
+    voice_config: Optional[dict] = None
+    format: Optional[str] = "wav"
     language: Optional[str] = "zh"
+    
+    class Config:
+        # 允許額外的字段
+        extra = "allow"
 
 class TTSResponse(BaseModel):
     success: bool
@@ -168,30 +173,73 @@ async def list_services():
     return services_info
 
 @app.post("/api/tts/generate")
-async def generate_tts(request: TTSRequest):
+async def generate_tts(request: Request):
     """
     TTS 語音合成統一入口
     根據 service 參數路由到對應的 TTS 服務
     """
     try:
-        logger.info(f"收到 TTS 請求: service={request.service}, text={request.text[:50]}...")
+        # 直接解析 JSON 請求體
+        body = await request.body()
+        logger.info(f"收到原始請求體長度: {len(body)} bytes")
+        
+        try:
+            # 嘗試不同的編碼方式解碼
+            try:
+                body_str = body.decode('utf-8')
+            except UnicodeDecodeError:
+                # 如果 UTF-8 失敗，嘗試其他編碼
+                try:
+                    body_str = body.decode('big5')
+                    logger.info("使用 Big5 編碼解碼請求體")
+                except UnicodeDecodeError:
+                    try:
+                        body_str = body.decode('gbk')
+                        logger.info("使用 GBK 編碼解碼請求體")
+                    except UnicodeDecodeError:
+                        body_str = body.decode('utf-8', errors='ignore')
+                        logger.warning("使用 UTF-8 忽略錯誤模式解碼請求體")
+            
+            logger.info(f"解碼後的請求體: {body_str}")
+            data = json.loads(body_str)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON 解析錯誤: {e}")
+            raise HTTPException(status_code=400, detail=f"JSON 格式錯誤: {str(e)}")
+        
+        logger.info(f"解析後的數據: {data}")
+        
+        # 提取參數
+        text = data.get("text")
+        service = data.get("service", "service1")
+        voice_config = data.get("voice_config") or {}
+        format_type = data.get("format", "wav")
+        language = data.get("language", "zh")
+        
+        # 語言參數轉換 - ATEN 服務需要特定格式
+        if service == "service3" and language == "zh":
+            language = "zh-TW"
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="缺少必要參數: text")
+        
+        logger.info(f"收到 TTS 請求: service={service}, text={text[:50]}...")
         
         # 檢查服務是否存在
-        if request.service not in tts_services:
+        if service not in tts_services:
             raise HTTPException(
                 status_code=400, 
-                detail=f"服務 '{request.service}' 不存在。可用服務: {list(tts_services.keys())}"
+                detail=f"服務 '{service}' 不存在。可用服務: {list(tts_services.keys())}"
             )
         
         # 獲取對應的 TTS 服務
-        tts_service = tts_services[request.service]
+        tts_service = tts_services[service]
         
         # 調用 TTS 服務生成音頻
         result = await tts_service.generate_speech(
-            text=request.text,
-            voice_config=request.voice_config,
-            format=request.format,
-            language=request.language
+            text=text,
+            voice_config=voice_config,
+            format=format_type,
+            language=language
         )
         
         if result["success"]:
@@ -201,7 +249,7 @@ async def generate_tts(request: TTSRequest):
             
             audio_data = result["audio_data"]
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"tts_{request.service}_{timestamp}_{uuid.uuid4().hex[:8]}.{request.format}"
+            filename = f"tts_{service}_{timestamp}_{uuid.uuid4().hex[:8]}.{format_type}"
             
             # 確保音頻目錄存在
             audio_dir = "/app/data/audios"
@@ -217,10 +265,10 @@ async def generate_tts(request: TTSRequest):
             # 返回音頻數據
             return Response(
                 content=audio_data,
-                media_type=f"audio/{request.format}",
+                media_type=f"audio/{format_type}",
                 headers={
                     "Content-Disposition": f"attachment; filename={filename}",
-                    "X-Service": request.service,
+                    "X-Service": service,
                     "X-Duration": str(result.get("duration", 0)),
                     "X-Filename": filename,
                     "X-Audio-Path": f"/data/audios/{filename}"
