@@ -1,0 +1,126 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { UserCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { FileUpload } from "@/components/file-upload";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { InsertModel } from "@shared/schema";
+
+export function CharacterModelCreation() {
+  const [characterModel, setCharacterModel] = useState({
+    name: "",
+  });
+  const [trainingFiles, setTrainingFiles] = useState<string[]>([]);
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const createModelMutation = useMutation({
+    mutationFn: async (modelData: InsertModel) => {
+      const response = await apiRequest("POST", "/api/models", modelData);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "人物模特創建成功",
+        description: "您的AI人物模特已創建完成",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      // Reset form
+      setCharacterModel({ name: "" });
+      setTrainingFiles([]);
+    },
+    onError: () => {
+      toast({
+        title: "創建失敗",
+        description: "請檢查輸入信息後重試",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreateModel = () => {
+    const modelData: InsertModel = {
+      name: characterModel.name,
+      type: "character",
+      provider: "heygem",
+      language: "zh-TW",
+      description: "人物模特",
+      status: "ready",
+      voiceSettings: null,
+      characterSettings: null,
+      trainingFiles: trainingFiles,
+    };
+
+    createModelMutation.mutate(modelData);
+  };
+
+  return (
+    <Card className="mb-8">
+      <CardContent className="p-6">
+        <div className="flex items-center space-x-3 mb-6">
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+            <UserCircle className="text-green-600 h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">創建人物模特</h3>
+            <p className="text-sm text-gray-600">創建個性化的AI人物模型</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div>
+            <h4 className="text-md font-medium text-gray-900 mb-4">模特配置</h4>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="characterName">模特名稱</Label>
+                <Input
+                  id="characterName"
+                  placeholder="輸入人物模特名稱"
+                  value={characterModel.name}
+                  onChange={(e) => setCharacterModel(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+            </div>
+            
+            <div className="mt-6 bg-blue-50 p-3 rounded-lg">
+              <p className="text-sm text-blue-800">
+                • 建議上傳清晰的正面人物影片<br/>
+                • 影片長度建議 10-30 秒<br/>
+                • 人物表情和動作自然
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-md font-medium text-gray-900 mb-4">人物影片</h4>
+            <FileUpload
+              accept=".mp4,.avi,.mov,.mkv"
+              multiple={false}
+              onFilesChange={setTrainingFiles}
+              description="上傳人物影片，支持 MP4, AVI, MOV 格式，最大 100MB"
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">創建時間: <span className="font-medium text-gray-900">立即完成</span></span>
+            </div>
+            <Button 
+              onClick={handleCreateModel}
+              disabled={!characterModel.name || trainingFiles.length === 0 || createModelMutation.isPending}
+            >
+              {createModelMutation.isPending ? "創建中..." : "立即創建"}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
