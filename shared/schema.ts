@@ -31,7 +31,12 @@ export const generatedContent = pgTable("generated_content", {
   emotion: text("emotion").default("neutral"),
   status: text("status").notNull().default("generating"), // 'generating', 'completed', 'failed'
   duration: integer("duration"), // in seconds
+  provider: text("provider"), // TTS 提供商
+  ttsModel: text("tts_model"), // TTS 模型名稱
+  isFavorite: boolean("is_favorite").default(false), // 是否收藏
+  everFavorited: boolean("ever_favorited").default(false), // 是否曾經被收藏過
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({

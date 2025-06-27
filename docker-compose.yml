@@ -1,63 +1,136 @@
-version: '3.8'
-
 networks:
-  ai_network:
+  heygem_network:
     driver: bridge
 
 services:
-  # AI Model Studio Web 應用
-  ai-model-studio:
+  # HeyGem Web 應用 (整合後的前後端)
+  heygem-web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ai-model-studio
-    ports:
-      - "5000:5000"
+    container_name: heygem-web
+    # 移除外部端口暴露，只通過 nginx 代理訪問
+    expose:
+      - "5000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=5000
-      - TTS_URL=http://tts-server:8080
-      - VIDEO_GEN_URL=http://video-gen:8383
+      - TTS_URL=http://tts-server:18180
+      - MY_TTS_URL=http://heygem-tts-services:8080
+      - ASR_URL=http://asr-server:10095
     volumes:
-      - ./uploads:/app/uploads
-      - ./data:/app/data
+      # 一次性掛載整個專案目錄
+      - .:/app
+      # 保留 node_modules volume 避免權限問題
+      - node_modules:/app/node_modules
     networks:
-      - ai_network
+      - heygem_network
     depends_on:
       - tts-server
+      - heygem-tts-services
     restart: unless-stopped
 
-  # TTS 語音合成服務 (簡化版本用於演示)
+  # TTS 語音合成服務 (Fish Speech - 使用現有鏡像)
   tts-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.tts
-    container_name: tts-server
+    image: guiji2025/fish-speech-ziming
+    container_name: heygem-tts
+    restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "18180:8080"
+    volumes:
+      - ./data/voice:/code/data
+    command: /bin/bash -c "/opt/conda/envs/python310/bin/python3 tools/api_server.py --listen 0.0.0.0:8080"
+    networks:
+      - heygem_network
+
+  # HeyGem 自定義 TTS 服務集合
+  heygem-tts-services:
+    build:
+      context: ./tts-services
+      dockerfile: Dockerfile
+    container_name: heygem-tts-services
+    ports:
+      - "18200:8080"  # 主入口
+      - "18201:8081"  # TTS 服務 1
+      - "18202:8082"  # TTS 服務 2
+      - "18203:8083"  # TTS 服務 3
     environment:
       - PYTHONPATH=/app
+    env_file:
+      - ./tts-services/.env  # 載入 TTS 服務專用的環境變數
     volumes:
-      - ./data/voice:/app/data
+      # 一次性掛載 TTS 服務目錄
+      - ./tts-services:/app
+      - ./data:/app/data
     networks:
-      - ai_network
+      - heygem_network
     restart: unless-stopped
 
-  # PostgreSQL 資料庫 (可選，如果需要持久化存儲)
-  postgres:
-    image: postgres:15-alpine
-    container_name: ai-studio-db
-    environment:
-      - POSTGRES_DB=ai_studio
-      - POSTGRES_USER=ai_user
-      - POSTGRES_PASSWORD=ai_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # ASR 語音識別服務
+  asr-server:
+    image: guiji2025/fun-asr
+    container_name: heygem-asr
+    restart: unless-stopped
+    runtime: nvidia
+    privileged: true
+    working_dir: /workspace/FunASR/runtime
     ports:
-      - "5432:5432"
+      - "10095:10095"
+    command: sh /run.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # 掛載數據目錄
+      - ./data/voice:/code/data
     networks:
-      - ai_network
+      - heygem_network
+
+  # 數字人生成服務 (Face2Face)
+  heygem-gen-video:
+    image: guiji2025/heygem.ai
+    container_name: heygem-gen-video
+    restart: unless-stopped
+    runtime: nvidia
+    privileged: true
+    ports:
+      - "8383:8383"
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    volumes:
+      - ./data:/code/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    shm_size: '8g'
+    command: python /code/app_local.py
+    networks:
+      - heygem_network
+
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: heygem-nginx
+    ports:
+      - "80:80"
+      - "8883:8883"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - heygem_network
+    depends_on:
+      - heygem-web
+      - tts-server
+      - heygem-tts-services
+      - asr-server
+      - heygem-gen-video
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  node_modules:

@@ -12,10 +12,37 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  let body: string | FormData | undefined;
+  let headers: Record<string, string> = {};
+
+  if (data) {
+    // 檢查是否包含 File 物件，如果有就使用 FormData
+    const hasFile = data && typeof data === 'object' && 
+      Object.values(data).some(value => value instanceof File);
+    
+    if (hasFile) {
+      // 使用 FormData 處理檔案上傳
+      const formData = new FormData();
+      Object.entries(data as Record<string, any>).forEach(([key, value]) => {
+        if (value instanceof File) {
+          formData.append(key, value);
+        } else if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+      body = formData;
+      // FormData 會自動設定 Content-Type，不需要手動設定
+    } else {
+      // 使用 JSON
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(data);
+    }
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
+    headers,
+    body,
     credentials: "include",
   });
 

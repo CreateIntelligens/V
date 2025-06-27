@@ -9,8 +9,9 @@ export function Navigation() {
 
   const navigation = [
     { name: "首頁", href: "/", icon: Home },
-    { name: "模特管理", href: "/models", icon: Users },
-    { name: "視頻編輯", href: "/video-editor", icon: Video },
+    { name: "聲音模特", href: "/voices", icon: Users },
+    { name: "人物模特", href: "/models", icon: Users },
+    { name: "影音生成", href: "/editor", icon: Video },
     { name: "作品管理", href: "/gallery", icon: Image },
   ];
 

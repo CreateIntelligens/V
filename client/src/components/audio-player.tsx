@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 
@@ -11,25 +11,71 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // 檢查 src 是否有效
+  if (!src || src === 'undefined' || src === 'null') {
+    console.error('AudioPlayer: 接收到無效的 src:', src);
+    return (
+      <div className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded">
+        <AlertCircle className="h-4 w-4 text-red-500" />
+        <span className="text-sm text-red-700">音頻源無效</span>
+        <span className="text-xs text-red-500">接收到的 src: {String(src)}</span>
+      </div>
+    );
+  }
+
+  // 確保使用完整的 URL
+  const fullAudioUrl = src.startsWith('http') ? src : `http://localhost:8883${src.startsWith('/') ? src : '/' + src}`;
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !src) {
+      console.log('AudioPlayer: 無效的音頻源', { audio: !!audio, src });
+      return;
+    }
+
+    console.log('AudioPlayer: 載入音頻', { src, fullAudioUrl });
+    setError(null);
+    setIsLoading(true);
 
     const updateTime = () => setCurrentTime(audio.currentTime);
-    const updateDuration = () => setDuration(audio.duration);
+    const updateDuration = () => {
+      setDuration(audio.duration);
+      setIsLoading(false);
+      console.log('AudioPlayer: 音頻載入完成', { duration: audio.duration, src });
+    };
+    
+    const handleError = (e: Event) => {
+      console.error('AudioPlayer: 音頻載入錯誤', e, { src });
+      setError('音頻載入失敗');
+      setIsLoading(false);
+    };
+
+    const handleCanPlay = () => {
+      console.log('AudioPlayer: 音頻可以播放', { src });
+      setIsLoading(false);
+    };
 
     audio.addEventListener("timeupdate", updateTime);
     audio.addEventListener("loadedmetadata", updateDuration);
     audio.addEventListener("ended", () => setIsPlaying(false));
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("canplay", handleCanPlay);
+
+    // 重新載入音頻
+    audio.load();
 
     return () => {
       audio.removeEventListener("timeupdate", updateTime);
       audio.removeEventListener("loadedmetadata", updateDuration);
       audio.removeEventListener("ended", () => setIsPlaying(false));
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [src]);
+  }, [src, fullAudioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -62,32 +108,61 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  if (error) {
+    return (
+      <div className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded">
+        <AlertCircle className="h-4 w-4 text-red-500" />
+        <span className="text-sm text-red-700">{error}</span>
+        <span className="text-xs text-red-500">URL: {src}</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center space-x-3">
-      <Button
-        variant="default"
-        size="icon"
-        className="w-10 h-10 rounded-full"
-        onClick={togglePlay}
-      >
-        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-      </Button>
-      
-      <div className="flex-1 relative">
-        <Slider
-          value={[currentTime]}
-          onValueChange={handleSeek}
-          max={duration || 100}
-          step={1}
-          className="w-full"
-        />
+    <div className="space-y-2">
+      <div className="flex items-center space-x-3">
+        <Button
+          variant="default"
+          size="icon"
+          className="w-10 h-10 rounded-full"
+          onClick={togglePlay}
+          disabled={isLoading || error !== null}
+        >
+          {isLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          ) : isPlaying ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
+        </Button>
+        
+        <div className="flex-1 relative">
+          <Slider
+            value={[currentTime]}
+            onValueChange={handleSeek}
+            max={duration || 100}
+            step={1}
+            className="w-full"
+            disabled={isLoading || error !== null}
+          />
+        </div>
+        
+        <span className="text-xs text-gray-500 font-mono min-w-[4rem]">
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
       </div>
       
-      <span className="text-xs text-gray-500 font-mono min-w-[4rem]">
-        {formatTime(currentTime)} / {formatTime(duration)}
-      </span>
+      <div className="text-xs text-gray-400">
+        音頻 URL: {src}
+      </div>
       
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio 
+        ref={audioRef} 
+        src={fullAudioUrl} 
+        preload="metadata"
+        crossOrigin="anonymous"
+      />
     </div>
   );
 }

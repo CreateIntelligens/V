@@ -1,4 +1,6 @@
 import { users, models, generatedContent, type User, type InsertUser, type Model, type InsertModel, type GeneratedContent, type InsertGeneratedContent } from "@shared/schema";
+import fs from "fs-extra";
+import path from "path";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -16,7 +18,8 @@ export interface IStorage {
   getGeneratedContent(): Promise<GeneratedContent[]>;
   getGeneratedContentByModel(modelId: number): Promise<GeneratedContent[]>;
   createGeneratedContent(content: InsertGeneratedContent): Promise<GeneratedContent>;
-  updateGeneratedContent(id: number, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined>;
+  updateGeneratedContent(id: number | string, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined>;
+  deleteGeneratedContent(id: number | string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -226,14 +229,136 @@ export class MemStorage implements IStorage {
     return content;
   }
 
-  async updateGeneratedContent(id: number, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined> {
-    const existing = this.generatedContent.get(id);
+  async updateGeneratedContent(id: number | string, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined> {
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    const existing = this.generatedContent.get(numId);
     if (!existing) return undefined;
     
     const updated = { ...existing, ...updates };
-    this.generatedContent.set(id, updated);
+    this.generatedContent.set(numId, updated);
     return updated;
+  }
+
+  async deleteGeneratedContent(id: number | string): Promise<boolean> {
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    return this.generatedContent.delete(numId);
   }
 }
 
-export const storage = new MemStorage();
+// JSON 檔案存儲類
+export class JsonStorage implements IStorage {
+  private modelsPath = path.join(process.cwd(), 'data', 'database', 'models.json');
+  private videosPath = path.join(process.cwd(), 'data', 'database', 'videos.json');
+
+  async getUser(id: number): Promise<User | undefined> {
+    return undefined; // 暫不實作
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return undefined; // 暫不實作
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    throw new Error("Not implemented");
+  }
+
+  async getModels(): Promise<Model[]> {
+    try {
+      const data = await fs.readJson(this.modelsPath);
+      return data.models || [];
+    } catch (error) {
+      console.error('讀取模特資料失敗:', error);
+      return [];
+    }
+  }
+
+  async getModel(id: number): Promise<Model | undefined> {
+    const models = await this.getModels();
+    return models.find(m => m.id === id.toString() || m.id === id);
+  }
+
+  async createModel(insertModel: InsertModel): Promise<Model> {
+    const models = await this.getModels();
+    const newModel: Model = {
+      ...insertModel,
+      id: Date.now().toString(), // 使用時間戳作為 ID
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    models.push(newModel);
+    await fs.writeJson(this.modelsPath, { models }, { spaces: 2 });
+    return newModel;
+  }
+
+  async updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined> {
+    const models = await this.getModels();
+    const index = models.findIndex(m => m.id === id);
+    if (index === -1) return undefined;
+    
+    models[index] = { ...models[index], ...updates, updatedAt: new Date() };
+    await fs.writeJson(this.modelsPath, { models }, { spaces: 2 });
+    return models[index];
+  }
+
+  async deleteModel(id: number): Promise<boolean> {
+    const models = await this.getModels();
+    const index = models.findIndex(m => m.id === id);
+    if (index === -1) return false;
+    
+    models.splice(index, 1);
+    await fs.writeJson(this.modelsPath, { models }, { spaces: 2 });
+    return true;
+  }
+
+  async getGeneratedContent(): Promise<GeneratedContent[]> {
+    try {
+      const data = await fs.readJson(this.videosPath);
+      return data.videos || [];
+    } catch (error) {
+      console.error('讀取影片資料失敗:', error);
+      return [];
+    }
+  }
+
+  async getGeneratedContentByModel(modelId: number): Promise<GeneratedContent[]> {
+    const content = await this.getGeneratedContent();
+    return content.filter(c => c.modelId === modelId);
+  }
+
+  async createGeneratedContent(insertContent: InsertGeneratedContent): Promise<GeneratedContent> {
+    const content = await this.getGeneratedContent();
+    const newContent: GeneratedContent = {
+      ...insertContent,
+      id: Date.now().toString(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    content.push(newContent);
+    await fs.writeJson(this.videosPath, { videos: content }, { spaces: 2 });
+    return newContent;
+  }
+
+  async updateGeneratedContent(id: number | string, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined> {
+    const content = await this.getGeneratedContent();
+    const index = content.findIndex(c => c.id === id || c.id === id.toString());
+    if (index === -1) return undefined;
+    
+    content[index] = { ...content[index], ...updates, updatedAt: new Date() };
+    await fs.writeJson(this.videosPath, { videos: content }, { spaces: 2 });
+    return content[index];
+  }
+
+  async deleteGeneratedContent(id: number | string): Promise<boolean> {
+    const content = await this.getGeneratedContent();
+    const index = content.findIndex(c => c.id === id || c.id === id.toString());
+    if (index === -1) return false;
+    
+    content.splice(index, 1);
+    await fs.writeJson(this.videosPath, { videos: content }, { spaces: 2 });
+    return true;
+  }
+}
+
+export const storage = new JsonStorage();

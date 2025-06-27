@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight } from "lucide-react";
+import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight, Play, Pause, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useRef } from "react";
 import type { Model } from "@shared/schema";
 
 interface ModelGridProps {
@@ -13,6 +14,11 @@ interface ModelGridProps {
 export function ModelGrid({ models }: ModelGridProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [playingAudio, setPlayingAudio] = useState<number | null>(null);
+  const audioRefs = useRef<{ [key: number]: HTMLAudioElement }>({});
+
+  // 確保 models 是陣列
+  const safeModels = Array.isArray(models) ? models : [];
 
   const deleteModelMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -40,6 +46,37 @@ export function ModelGrid({ models }: ModelGridProps) {
     }
   };
 
+  // 音頻播放控制
+  const handleAudioPlay = (modelId: number, audioUrl: string) => {
+    // 停止其他正在播放的音頻
+    Object.values(audioRefs.current).forEach(audio => {
+      if (!audio.paused) {
+        audio.pause();
+      }
+    });
+
+    if (playingAudio === modelId) {
+      // 如果正在播放這個音頻，則停止
+      setPlayingAudio(null);
+      if (audioRefs.current[modelId]) {
+        audioRefs.current[modelId].pause();
+      }
+    } else {
+      // 播放新音頻
+      if (!audioRefs.current[modelId]) {
+        audioRefs.current[modelId] = new Audio(audioUrl);
+        audioRefs.current[modelId].onended = () => setPlayingAudio(null);
+      }
+      audioRefs.current[modelId].play();
+      setPlayingAudio(modelId);
+    }
+  };
+
+  // 獲取影片第一幀預覽
+  const getVideoThumbnail = (videoPath: string) => {
+    return `/api/files/${videoPath.replace(/\\/g, '/')}/thumbnail`;
+  };
+
   const getModelIcon = (type: string) => {
     return type === "voice" ? MicOff : UserCircle;
   };
@@ -57,13 +94,24 @@ export function ModelGrid({ models }: ModelGridProps) {
     const d = new Date(date);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - d.getTime());
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 1) return "今天";
-    if (diffDays === 2) return "昨天";
-    if (diffDays <= 7) return `${diffDays}天前`;
-    if (diffDays <= 30) return `${Math.ceil(diffDays / 7)}週前`;
-    return d.toLocaleDateString();
+    // 今天：顯示時間
+    if (diffDays === 1) {
+      return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    }
+    // 昨天：顯示昨天 + 時間
+    if (diffDays === 2) {
+      return `昨天 ${d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    // 更早：顯示月/日 + 時間
+    return d.toLocaleDateString('zh-TW', { 
+      month: '2-digit', 
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
@@ -76,7 +124,7 @@ export function ModelGrid({ models }: ModelGridProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {models.map((model) => {
+        {safeModels.map((model) => {
           const Icon = getModelIcon(model.type);
           return (
             <Card key={model.id} className="hover:shadow-material-lg transition-shadow">
@@ -101,31 +149,70 @@ export function ModelGrid({ models }: ModelGridProps) {
                   </div>
                 </div>
                 <h4 className="font-semibold text-gray-900 mb-2">{model.name}</h4>
-                <p className="text-sm text-gray-600 mb-3">{model.description}</p>
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                  <span>{getModelTypeText(model.type)} | {model.language}</span>
-                  <span>{formatDate(model.createdAt)}</span>
-                </div>
-                <div className="mb-3">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    (model.provider || "heygem") === "heygem" 
-                      ? "bg-blue-100 text-blue-700"
-                      : (model.provider || "heygem") === "edgetts"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-purple-100 text-purple-700"
-                  }`}>
-                    {((model.provider || "heygem")).toUpperCase()}
-                  </span>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" className="flex-1">
-                      {model.type === "voice" ? "測試" : "預覽"}
-                    </Button>
-                    <Button size="sm" className="flex-1">
-                      {model.type === "voice" ? "使用" : "製作影片"}
-                    </Button>
+                
+                {/* 聲音模型音頻預覽 */}
+                {model.type === "voice" && model.trainingFiles && model.trainingFiles.length > 0 && (
+                  <div className="mb-3">
+                    <div className="w-full bg-gray-50 rounded-lg p-3 border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 truncate flex-1">
+                          {model.trainingFiles[0].split('/').pop()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleAudioPlay(model.id, `/api/files/${model.trainingFiles[0]}`)}
+                          className="ml-2 h-8 w-8 p-0"
+                        >
+                          {playingAudio === model.id ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {/* 人物模型影片預覽 */}
+                {model.type === "character" && model.trainingFiles && model.trainingFiles.length > 0 && (
+                  <div className="mb-3">
+                    <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden relative">
+                      <img
+                        src={getVideoThumbnail(model.trainingFiles[0])}
+                        alt="影片預覽"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // 如果縮圖載入失敗，顯示預設內容
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center text-gray-500 text-sm">
+                                <div class="text-center">
+                                  <div class="w-8 h-8 mx-auto mb-2 bg-gray-300 rounded flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                      <path d="M2 6a2 2 0 012-2h6l2 2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM5 8a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z"/>
+                                    </svg>
+                                  </div>
+                                  影片預覽
+                                </div>
+                              </div>
+                            `;
+                          }
+                        }}
+                      />
+                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded flex items-center">
+                        <Video className="w-3 h-3 mr-1" />
+                        影片
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                  <span>{formatDate(model.createdAt)}</span>
                 </div>
                 {model.status !== "ready" && (
                   <div className="mt-2 text-xs text-center">

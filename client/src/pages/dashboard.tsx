@@ -1,6 +1,7 @@
 import { Brain, Bell } from "lucide-react";
 import { ModelCreation } from "@/components/model-creation";
 import { ContentGeneration } from "@/components/content-generation";
+import { VideoGeneration } from "@/components/video-generation";
 import { ModelGrid } from "@/components/model-grid";
 import { useQuery } from "@tanstack/react-query";
 import type { Model, GeneratedContent } from "@shared/schema";
@@ -53,6 +54,9 @@ export default function Dashboard() {
 
         {/* Content Generation */}
         <ContentGeneration models={models} />
+
+        {/* Video Generation */}
+        <VideoGeneration />
 
         {/* My Models */}
         <ModelGrid models={models} />

@@ -3,24 +3,31 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import type { Model, GeneratedContent } from "@shared/schema";
 
 export default function Home() {
-  const { data: models = [] } = useQuery<Model[]>({
+  const { data: modelsResponse } = useQuery({
     queryKey: ["/api/models"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/models");
+      return response.json();
+    },
   });
+
+  const models = modelsResponse?.data?.list || [];
 
   const { data: content = [] } = useQuery<GeneratedContent[]>({
     queryKey: ["/api/content"],
   });
 
   const stats = {
-    totalModels: models.length,
-    voiceModels: models.filter(m => m.type === "voice").length,
-    characterModels: models.filter(m => m.type === "character").length,
-    totalContent: content.length,
-    audioContent: content.filter(c => c.type === "audio").length,
-    videoContent: content.filter(c => c.type === "video").length,
+    totalModels: Array.isArray(models) ? models.length : 0,
+    voiceModels: Array.isArray(models) ? models.filter(m => m.type === "voice").length : 0,
+    characterModels: Array.isArray(models) ? models.filter(m => m.type === "character").length : 0,
+    totalContent: Array.isArray(content) ? content.length : 0,
+    audioContent: Array.isArray(content) ? content.filter(c => c.type === "audio").length : 0,
+    videoContent: Array.isArray(content) ? content.filter(c => c.type === "video").length : 0,
   };
 
   return (
@@ -135,8 +142,8 @@ export default function Home() {
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Video className="text-green-600 h-6 w-6" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">視頻編輯</h3>
-                <p className="text-sm text-gray-600">編輯和製作視頻內容</p>
+                <h3 className="font-semibold text-gray-900 mb-2">影音生成</h3>
+                <p className="text-sm text-gray-600">編輯和製作影片內容</p>
               </CardContent>
             </Card>
           </Link>
@@ -166,7 +173,7 @@ export default function Home() {
       </section>
 
       {/* Recent Activity */}
-      {content.length > 0 && (
+      {Array.isArray(content) && content.length > 0 && (
         <section>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold text-gray-900">最近活動</h2>
@@ -190,7 +197,7 @@ export default function Home() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">
-                        {item.type === 'audio' ? '音頻生成' : '視頻生成'}
+                        {item.type === 'audio' ? '音頻生成' : '影片生成'}
                       </p>
                       <p className="text-sm text-gray-500">
                         {new Date(item.createdAt!).toLocaleDateString()}
