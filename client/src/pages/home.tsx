@@ -17,9 +17,15 @@ export default function Home() {
 
   const models = modelsResponse?.data?.list || [];
 
-  const { data: content = [] } = useQuery<GeneratedContent[]>({
+  const { data: contentResponse } = useQuery({
     queryKey: ["/api/content"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/content");
+      return response.json();
+    },
   });
+
+  const content = contentResponse?.data?.list || [];
 
   const stats = {
     totalModels: Array.isArray(models) ? models.length : 0,
@@ -49,7 +55,7 @@ export default function Home() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/video-editor">
+            <Link href="/editor">
               <Button variant="outline" size="lg" className="px-8">
                 開始生成內容
               </Button>
@@ -136,7 +142,7 @@ export default function Home() {
             </Card>
           </Link>
 
-          <Link href="/video-editor">
+          <Link href="/editor">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardContent className="p-6 text-center">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">

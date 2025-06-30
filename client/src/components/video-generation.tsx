@@ -167,100 +167,100 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* 人物模型選擇 */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">選擇人物模型</Label>
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger>
-                <SelectValue placeholder="選擇一個人物模型" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelsData?.map((model: any) => (
-                  <SelectItem key={model.id} value={model.id.toString()}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <User className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <span>{model.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedModelData && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  已選擇：{selectedModelData.name}
-                </p>
+          {/* 語音生成方式 - 三個小框框橫向排列 */}
+          <div className="space-y-4">
+            <Label className="text-base font-semibold">語音生成方式</Label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 人物模型選擇 */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <User className="h-4 w-4 text-blue-600" />
+                  選擇人物模型
+                </Label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="選擇模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelsData?.map((model: any) => (
+                      <SelectItem key={model.id} value={model.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                            <User className="h-3 w-3 text-blue-600" />
+                          </div>
+                          <span className="text-sm">{model.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedModelData && (
+                  <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                    {selectedModelData.name}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* TTS 提供商選擇 */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">語音合成提供商</Label>
-            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-              <SelectTrigger>
-                <SelectValue placeholder="選擇語音合成服務" />
-              </SelectTrigger>
-              <SelectContent>
-                {TTS_PROVIDERS.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                        <Mic className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm">{provider.name}</span>
-                        <span className="text-xs text-gray-500">{provider.description}</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedProviderData && (
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700">
-                  已選擇：{selectedProviderData.name}
-                </p>
-                <p className="text-xs text-green-600">
-                  {selectedProviderData.description}
-                </p>
+              {/* TTS 提供商選擇 */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Mic className="h-4 w-4 text-green-600" />
+                  選擇 TTS 提供商
+                </Label>
+                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="選擇提供商" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TTS_PROVIDERS.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                            <Mic className="h-3 w-3 text-green-600" />
+                          </div>
+                          <span className="text-sm">{provider.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedProviderData && (
+                  <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                    {selectedProviderData.name}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* 聲音選擇 */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold">選擇聲音</Label>
-            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-              <SelectTrigger>
-                <SelectValue placeholder="選擇一個聲音" />
-              </SelectTrigger>
-              <SelectContent>
-                {EDGETTS_VOICES.map((voice) => (
-                  <SelectItem key={voice.id} value={voice.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <Play className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm">{voice.name}</span>
-                        <span className="text-xs text-gray-500">{voice.language}</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedVoiceData && (
-              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-purple-700">
-                  已選擇：{selectedVoiceData.name} ({selectedVoiceData.language})
-                </p>
+              {/* 聲音選擇 */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Play className="h-4 w-4 text-purple-600" />
+                  選擇聲音
+                </Label>
+                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="選擇聲音" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EDGETTS_VOICES.map((voice) => (
+                      <SelectItem key={voice.id} value={voice.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
+                            <Play className="h-3 w-3 text-purple-600" />
+                          </div>
+                          <span className="text-sm">{voice.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedVoiceData && (
+                  <div className="p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-700">
+                    {selectedVoiceData.name}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {/* 文字內容 */}
