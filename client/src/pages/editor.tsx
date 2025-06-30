@@ -42,6 +42,13 @@ export default function VideoEditor() {
   const [minimaxPitch, setMinimaxPitch] = useState([0]);
   const [showMinimaxAdvanced, setShowMinimaxAdvanced] = useState(false);
 
+  // ATEN 進階控制
+  const [showATENAdvanced, setShowATENAdvanced] = useState(false);
+  const [atenPitch, setAtenPitch] = useState([0]);
+  const [atenRate, setAtenRate] = useState([1.0]);
+  const [atenVolume, setAtenVolume] = useState([0]);
+  const [atenSilenceScale, setAtenSilenceScale] = useState([1.0]);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -82,6 +89,7 @@ export default function VideoEditor() {
   const ttsProviders = [
     { id: "edgetts", name: "EdgeTTS (微軟)", description: "免費，多語言支援" },
     { id: "minimax", name: "MiniMax", description: "付費，高品質中文，支援情緒控制" },
+    { id: "aten", name: "ATEN AIVoice", description: "專業級語音合成，支援中文、英文、台語" },
     { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" },
   ];
 
@@ -99,6 +107,33 @@ export default function VideoEditor() {
       { id: "moss_audio_069e7ef7-45ab-11f0-b24c-2e48b7cbf811", name: "小安 (女)", language: "zh-CN" },
       { id: "moss_audio_e2651ab2-50e2-11f0-8bff-3ee21232901d", name: "小賴 (男)", language: "zh-CN" },
       { id: "moss_audio_9e3d9106-42a6-11f0-b6c4-9e15325fe584", name: "Hayley (女)", language: "zh-CN" },
+    ],
+    aten: [
+      // 男聲聲優
+      { id: "Aaron", name: "沉穩男聲-裕祥", language: "zh-TW" },
+      { id: "Shawn", name: "斯文男聲-俊昇", language: "zh-TW" },
+      { id: "Jason", name: "自在男聲-展河", language: "zh-TW" },
+      { id: "Winston_narrative", name: "悠然男聲-展揚", language: "zh-TW" },
+      { id: "Alan_colloquial", name: "穩健男聲-展仁", language: "zh-TW" },
+      { id: "Waldo_Ad", name: "廣告男聲-展龍", language: "zh-TW" },
+      { id: "Bill_cheerful", name: "活力男聲-力晨", language: "zh-TW" },
+      { id: "Eason_broadcast", name: "廣播男聲-展宏", language: "zh-TW" },
+      
+      // 女聲聲優
+      { id: "Bella_host", name: "動人女聲-貝拉", language: "zh-TW" },
+      { id: "Bella_vivid", name: "開朗女聲-貝拉", language: "zh-TW" },
+      { id: "Rena", name: "溫和女聲-思柔", language: "zh-TW" },
+      { id: "Hannah_colloquial", name: "自在女聲-思涵", language: "zh-TW" },
+      { id: "Michelle_colloquial", name: "悠然女聲-思婷", language: "zh-TW" },
+      { id: "Celia_call_center", name: "客服女聲-思琪", language: "zh-TW" },
+      { id: "Hannah_news", name: "知性女聲-思涵", language: "zh-TW" },
+      { id: "Aurora", name: "穩重女聲-嘉妮", language: "zh-TW" },
+      
+      // 台語聲優
+      { id: "Easton_news", name: "台語男聲-文雄", language: "TL" },
+      { id: "Raina_narrative", name: "台語女聲-思羽", language: "TL" },
+      { id: "Winston_narrative_taigi", name: "台語悠然男聲-展揚", language: "TL" },
+      { id: "Celia_call_center_taigi", name: "台語客服女聲-思琪", language: "TL" },
     ],
     fishtts: [
       { id: "default", name: "預設聲音", language: "zh-CN" },
@@ -174,13 +209,16 @@ export default function VideoEditor() {
       const taskCode = data.data.taskCode;
       console.log(`🎬 開始監控影片生成進度: ${taskCode}`);
 
-      // 真正的進度追蹤
+      // 真正的進度追蹤 - 增加重試計數和更長的等待時間
+      let retryCount = 0;
+      const maxRetries = 60; // 最多重試 60 次 (約 5 分鐘)
+      
       const checkProgress = async () => {
         try {
           const statusResponse = await apiRequest("GET", `/api/video/query?code=${taskCode}`);
           const statusData = await statusResponse.json();
 
-          console.log('Face2Face 回應:', statusData);
+          console.log(`Face2Face 回應 (重試 ${retryCount}/${maxRetries}):`, statusData);
 
           // Face2Face 容器的回應格式: { code: 10000, data: {...}, msg: "...", success: true }
           if (statusData.code === 10000) {
@@ -189,20 +227,21 @@ export default function VideoEditor() {
             const progress = data.progress || 0;
 
             setVideoProgress(progress);
+            retryCount = 0; // 重置重試計數
 
-            if (status === 'completed' && data.result) {
-              // 影片生成完成
+            if (status === 2 && data.result) {
+              // 影片生成完成 (status === 2 表示完成)
               setGeneratingVideo(false);
               setVideoProgress(100);
-              setGeneratedVideo(`http://localhost:8883/results${data.result}`);
-              setGeneratedVideoId(data.data?.id || taskCode);
+              setGeneratedVideo(data.video_url || `/videos/${data.result}`);
+              setGeneratedVideoId(taskCode);
               toast({
                 title: "影片生成完成",
                 description: "您的 AI 影片已準備好",
               });
               queryClient.invalidateQueries({ queryKey: ["/api/content"] });
               return; // 停止檢查
-            } else if (status === 'failed') {
+            } else if (status === 'failed' || status === -1) {
               // 影片生成失敗
               setGeneratingVideo(false);
               toast({
@@ -216,22 +255,94 @@ export default function VideoEditor() {
             // 繼續檢查進度
             setTimeout(checkProgress, 3000); // 3 秒後再次檢查
           } else if (statusData.code === 10004) {
-            // 任務不存在，停止檢查
-            console.log('任務不存在，停止監控');
-            setGeneratingVideo(false);
-            toast({
-              title: "任務查詢失敗",
-              description: "任務可能已過期或不存在",
-              variant: "destructive",
-            });
-            return;
+            // 任務不存在，可能已完成或還在處理中
+            retryCount++;
+            console.log(`任務暫時查不到 (重試 ${retryCount}/${maxRetries})，可能還在處理中...`);
+            
+            // 檢查是否超過最大重試次數
+            if (retryCount >= maxRetries) {
+              console.log('達到最大重試次數，檢查資料庫狀態...');
+              
+              try {
+                // 從 taskCode 提取內容 ID
+                const contentIdMatch = taskCode.match(/task_(\d+)_/);
+                if (contentIdMatch) {
+                  const contentId = contentIdMatch[1];
+                  
+                  // 檢查資料庫中的內容狀態
+                  const contentResponse = await apiRequest("GET", `/api/content/${contentId}`);
+                  const contentData = await contentResponse.json();
+                  
+                  if (contentData.success && contentData.data.status === "completed") {
+                    // 任務已在資料庫中標記為完成
+                    setGeneratingVideo(false);
+                    setVideoProgress(100);
+                    setGeneratedVideo(contentData.data.outputPath);
+                    setGeneratedVideoId(contentData.data.id);
+                    toast({
+                      title: "影片生成完成",
+                      description: "您的 AI 影片已準備好",
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["/api/content"] });
+                    return;
+                  } else if (contentData.data.status === "failed") {
+                    // 任務失敗
+                    setGeneratingVideo(false);
+                    toast({
+                      title: "影片生成失敗",
+                      description: "請稍後重試",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                }
+              } catch (error) {
+                console.error('檢查資料庫狀態失敗:', error);
+              }
+              
+              // 如果資料庫中還是 processing 狀態，停止監控
+              setGeneratingVideo(false);
+              toast({
+                title: "監控超時",
+                description: "影片可能還在生成中，請稍後到作品管理查看",
+                variant: "destructive",
+              });
+              return;
+            }
+            
+            // 繼續嘗試，但間隔時間更長
+            setTimeout(checkProgress, 5000); // 5 秒後再次檢查
           } else {
             // 其他錯誤，繼續嘗試
-            console.log('查詢失敗，繼續嘗試:', statusData.msg);
+            retryCount++;
+            console.log(`查詢失敗 (重試 ${retryCount}/${maxRetries}):`, statusData.msg);
+            
+            if (retryCount >= maxRetries) {
+              setGeneratingVideo(false);
+              toast({
+                title: "監控超時",
+                description: "無法獲取影片生成狀態，請稍後到作品管理查看",
+                variant: "destructive",
+              });
+              return;
+            }
+            
             setTimeout(checkProgress, 5000); // 5 秒後再次檢查
           }
         } catch (error) {
-          console.error('檢查影片生成進度失敗:', error);
+          retryCount++;
+          console.error(`檢查影片生成進度失敗 (重試 ${retryCount}/${maxRetries}):`, error);
+          
+          if (retryCount >= maxRetries) {
+            setGeneratingVideo(false);
+            toast({
+              title: "監控超時",
+              description: "網路連接問題，請稍後到作品管理查看",
+              variant: "destructive",
+            });
+            return;
+          }
+          
           // 繼續嘗試
           setTimeout(checkProgress, 5000); // 5 秒後再次檢查
         }
@@ -284,6 +395,11 @@ export default function VideoEditor() {
       minimaxVolume: minimaxVolume[0],
       minimaxSpeed: minimaxSpeed[0],
       minimaxPitch: minimaxPitch[0],
+      // ATEN 進階設定
+      atenPitch: atenPitch[0],
+      atenRate: atenRate[0],
+      atenVolume: atenVolume[0],
+      atenSilenceScale: atenSilenceScale[0],
     });
   };
 
@@ -315,7 +431,7 @@ export default function VideoEditor() {
       return;
     }
 
-    generateVideoMutation.mutate({
+    const videoData: any = {
       modelId: parseInt(selectedCharacterModelId), // 轉換為數字
       inputText: voiceGenerationType === "basic_tts" ? inputText : "",
       emotion,
@@ -323,13 +439,24 @@ export default function VideoEditor() {
       voiceSource: voiceGenerationType === "basic_tts" ? "model" : "reference",
       provider: selectedTTSProvider,
       ttsModel: selectedTTSModel,
-      referenceAudio: referenceAudio,
       // MiniMax 進階設定
       minimaxEmotion,
       minimaxVolume: minimaxVolume[0],
       minimaxSpeed: minimaxSpeed[0],
       minimaxPitch: minimaxPitch[0],
-    });
+      // ATEN 進階設定
+      atenPitch: atenPitch[0],
+      atenRate: atenRate[0],
+      atenVolume: atenVolume[0],
+      atenSilenceScale: atenSilenceScale[0],
+    };
+
+    // 如果有參考音頻，添加到數據中
+    if (referenceAudio) {
+      videoData.referenceAudio = referenceAudio;
+    }
+
+    generateVideoMutation.mutate(videoData);
   };
 
   return (
@@ -429,9 +556,9 @@ export default function VideoEditor() {
                           <SelectContent>
                             {ttsProviders.map((provider) => (
                               <SelectItem key={provider.id} value={provider.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{provider.name}</span>
-                                  <span className="text-xs text-gray-500">{provider.description}</span>
+                                <div className="flex flex-col items-start w-full">
+                                  <span className="font-medium text-left">{provider.name}</span>
+                                  <span className="text-xs text-gray-500 text-left">{provider.description}</span>
                                 </div>
                               </SelectItem>
                             ))}
@@ -462,7 +589,7 @@ export default function VideoEditor() {
                         </div>
                       )}
 
-                      {/* MiniMax 進階設定 (影片生成) */}
+                      {/* MiniMax 進階設定 */}
                       {selectedTTSProvider === "minimax" && (
                         <div className="space-y-3">
                           <Collapsible open={showMinimaxAdvanced} onOpenChange={setShowMinimaxAdvanced}>
@@ -540,6 +667,112 @@ export default function VideoEditor() {
                                 <div className="flex justify-between text-xs text-gray-500">
                                   <span>-12 (低)</span>
                                   <span>+12 (高)</span>
+                                </div>
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </div>
+                      )}
+
+                      {/* ATEN 進階設定 */}
+                      {selectedTTSProvider === "aten" && (
+                        <div className="space-y-3">
+                          <Collapsible open={showATENAdvanced} onOpenChange={setShowATENAdvanced}>
+                            <CollapsibleTrigger asChild>
+                              <Button variant="outline" className="w-full">
+                                <Settings className="mr-2 h-4 w-4" />
+                                ATEN 進階語音設定
+                                {showATENAdvanced ? " (已展開)" : " (點擊展開)"}
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="space-y-4 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                              <div className="space-y-4">
+                                <Label className="text-base font-semibold">精細語音參數調整</Label>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  {/* 音調 */}
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <Label className="text-sm font-medium">音調 (Pitch)</Label>
+                                      <span className="text-sm text-muted-foreground">
+                                        {atenPitch[0] > 0 ? '+' : ''}{atenPitch[0].toFixed(1)}st
+                                      </span>
+                                    </div>
+                                    <Slider
+                                      value={atenPitch}
+                                      onValueChange={setAtenPitch}
+                                      min={-2}
+                                      max={2}
+                                      step={0.1}
+                                      className="w-full"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                      調整聲音的基頻高低 (-2st ~ +2st)
+                                    </div>
+                                  </div>
+
+                                  {/* 語速 */}
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <Label className="text-sm font-medium">語速 (Rate)</Label>
+                                      <span className="text-sm text-muted-foreground">
+                                        {atenRate[0].toFixed(1)}x
+                                      </span>
+                                    </div>
+                                    <Slider
+                                      value={atenRate}
+                                      onValueChange={setAtenRate}
+                                      min={0.8}
+                                      max={1.2}
+                                      step={0.1}
+                                      className="w-full"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                      調整說話速度 (0.8x ~ 1.2x)
+                                    </div>
+                                  </div>
+
+                                  {/* 音量 */}
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <Label className="text-sm font-medium">音量 (Volume)</Label>
+                                      <span className="text-sm text-muted-foreground">
+                                        {atenVolume[0] > 0 ? '+' : ''}{atenVolume[0].toFixed(1)}dB
+                                      </span>
+                                    </div>
+                                    <Slider
+                                      value={atenVolume}
+                                      onValueChange={setAtenVolume}
+                                      min={-6}
+                                      max={6}
+                                      step={0.5}
+                                      className="w-full"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                      調整音量大小 (-6dB ~ +6dB)
+                                    </div>
+                                  </div>
+
+                                  {/* 停頓時間 */}
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between">
+                                      <Label className="text-sm font-medium">停頓時間 (Silence Scale)</Label>
+                                      <span className="text-sm text-muted-foreground">
+                                        {atenSilenceScale[0].toFixed(1)}x
+                                      </span>
+                                    </div>
+                                    <Slider
+                                      value={atenSilenceScale}
+                                      onValueChange={setAtenSilenceScale}
+                                      min={0.5}
+                                      max={3.0}
+                                      step={0.1}
+                                      className="w-full"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                      調整注音符號停頓時間 (0.5x ~ 3.0x)
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </CollapsibleContent>
@@ -731,9 +964,9 @@ export default function VideoEditor() {
                           <SelectContent>
                             {ttsProviders.map((provider) => (
                               <SelectItem key={provider.id} value={provider.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{provider.name}</span>
-                                  <span className="text-xs text-gray-500">{provider.description}</span>
+                                <div className="flex flex-col items-start w-full">
+                                  <span className="font-medium text-left">{provider.name}</span>
+                                  <span className="text-xs text-gray-500 text-left">{provider.description}</span>
                                 </div>
                               </SelectItem>
                             ))}

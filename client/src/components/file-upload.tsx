@@ -8,6 +8,7 @@ interface FileUploadProps {
   accept: string;
   multiple?: boolean;
   onFilesChange: (files: string[]) => void;
+  onActualFilesChange?: (files: File[]) => void; // 新增：傳遞實際檔案對象
   description: string;
 }
 
@@ -18,10 +19,15 @@ interface UploadedFile {
   status: "uploading" | "completed" | "error";
 }
 
-export function FileUpload({ accept, multiple = false, onFilesChange, description }: FileUploadProps) {
+export function FileUpload({ accept, multiple = false, onFilesChange, onActualFilesChange, description }: FileUploadProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [actualFiles, setActualFiles] = useState<File[]>([]); // 保存實際檔案對象
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // 對於模特檔案，強制限制為單檔案上傳
+  const isModelUpload = accept.includes('.mp4') || accept.includes('.avi') || accept.includes('.mov');
+  const actualMultiple = isModelUpload ? false : multiple;
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
@@ -31,49 +37,55 @@ export function FileUpload({ accept, multiple = false, onFilesChange, descriptio
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
-  const simulateUpload = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const fileName = file.name;
-      const uploadedFile: UploadedFile = {
-        name: fileName,
-        size: file.size,
-        progress: 0,
-        status: "uploading",
-      };
+  const stageFile = (file: File): string => {
+    const fileName = file.name;
+    const uploadedFile: UploadedFile = {
+      name: fileName,
+      size: file.size,
+      progress: 100, // 暫存檔案顯示為完成狀態
+      status: "completed",
+    };
 
-      setFiles(prev => [...prev, uploadedFile]);
-
-      // Simulate upload progress
-      const interval = setInterval(() => {
-        setFiles(prev => prev.map(f => {
-          if (f.name === fileName && f.status === "uploading") {
-            const newProgress = Math.min(f.progress + 10, 100);
-            return {
-              ...f,
-              progress: newProgress,
-              status: newProgress === 100 ? "completed" : "uploading",
-            };
-          }
-          return f;
-        }));
-      }, 200);
-
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve(fileName);
-      }, 2000);
-    });
+    setFiles(prev => [...prev, uploadedFile]);
+    
+    // 將檔案暫存在組件中，等待真正創建模特時再上傳
+    // 這裡只返回檔案名稱，實際檔案會在創建模特時上傳
+    return fileName;
   };
 
   const handleFiles = async (fileList: FileList) => {
-    const fileArray = Array.from(fileList);
-    const uploadPromises = fileArray.map(file => simulateUpload(file));
+    let fileArray = Array.from(fileList);
     
-    try {
-      const uploadedFileNames = await Promise.all(uploadPromises);
-      onFilesChange([...files.filter(f => f.status === "completed").map(f => f.name), ...uploadedFileNames]);
-    } catch (error) {
-      console.error("Upload failed:", error);
+    // 如果是模特上傳，只取第一個檔案
+    if (isModelUpload && fileArray.length > 1) {
+      fileArray = [fileArray[0]];
+      console.log('模特上傳限制為單檔案，只處理第一個檔案');
+    }
+    
+    // 如果是模特上傳且已有檔案，先清空
+    if (isModelUpload && files.length > 0) {
+      setFiles([]);
+      setActualFiles([]);
+    }
+    
+    const stagedFileNames = fileArray.map(file => stageFile(file));
+    
+    // 保存實際檔案對象
+    if (isModelUpload) {
+      setActualFiles(fileArray);
+      onActualFilesChange?.(fileArray);
+    } else {
+      const newActualFiles = [...actualFiles, ...fileArray];
+      setActualFiles(newActualFiles);
+      onActualFilesChange?.(newActualFiles);
+    }
+    
+    // 直接使用暫存的檔案名稱，不進行實際上傳
+    if (isModelUpload) {
+      // 模特上傳只保留最新的檔案
+      onFilesChange(stagedFileNames);
+    } else {
+      onFilesChange([...files.filter(f => f.status === "completed").map(f => f.name), ...stagedFileNames]);
     }
   };
 
@@ -136,7 +148,7 @@ export function FileUpload({ accept, multiple = false, onFilesChange, descriptio
             type="file"
             className="hidden"
             accept={accept}
-            multiple={multiple}
+            multiple={actualMultiple}
             onChange={handleFileSelect}
           />
         </CardContent>

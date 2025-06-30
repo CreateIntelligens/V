@@ -24,7 +24,7 @@ export const models = pgTable("models", {
 
 export const generatedContent = pgTable("generated_content", {
   id: serial("id").primaryKey(),
-  modelId: integer("model_id").references(() => models.id),
+  modelId: text("model_id"), // 改為 text 類型以支援大數字
   type: text("type").notNull(), // 'audio' or 'video'
   inputText: text("input_text").notNull(),
   outputPath: text("output_path"),
@@ -52,6 +52,18 @@ export const insertModelSchema = createInsertSchema(models).omit({
 export const insertGeneratedContentSchema = createInsertSchema(generatedContent).omit({
   id: true,
   createdAt: true,
+}).extend({
+  // 允許額外的 TTS 參數
+  minimaxEmotion: z.string().optional(),
+  minimaxVolume: z.number().optional(),
+  minimaxSpeed: z.number().optional(),
+  minimaxPitch: z.number().optional(),
+  atenPitch: z.number().optional(),
+  atenRate: z.number().optional(),
+  atenVolume: z.number().optional(),
+  atenSilenceScale: z.number().optional(),
+  voiceSource: z.string().optional(),
+  referenceAudio: z.any().optional(), // 文件上傳
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

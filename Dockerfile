@@ -20,7 +20,7 @@ RUN npm install
 
 # 創建必要的目錄結構（程式碼會通過掛載提供）
 RUN mkdir -p uploads \
-             data/{audios,videos,database,temp}
+             data/{audios,videos,database,temp,models}
 
 # 設置目錄權限
 RUN chmod -R 755 uploads data

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 const TTS_SERVICES = [
   { id: "service1", name: "EdgeTTS", description: "微軟語音服務" },
   { id: "service2", name: "MiniMax", description: "MiniMax AI 語音" },
-  { id: "service3", name: "Eugene's", description: "Eugene's TTS" },
+  { id: "service3", name: "ATEN AIVoice", description: "ATEN 專業語音合成" },
   { id: "service4", name: "OpenAI", description: "OpenAI TTS" },
 ];
 
@@ -48,16 +48,24 @@ export function BasicTTS() {
           const data = await response.json();
           return data.voices?.zh || [];
         }
+      } else if (selectedService === "service3") {
+        const response = await fetch(`http://localhost:18200/api/tts/services/${selectedService}/info`);
+        if (response.ok) {
+          const data = await response.json();
+          return data.available_models || [];
+        }
       }
       return [];
     },
-    enabled: selectedService === "service2",
+    enabled: selectedService === "service2" || selectedService === "service3",
   });
 
   // 當服務改變時重置音色選擇
   useEffect(() => {
     if (selectedService === "service2" && voicesData && voicesData.length > 0) {
       setSelectedVoice(voicesData[0].id);
+    } else if (selectedService === "service3" && voicesData && voicesData.length > 0) {
+      setSelectedVoice(voicesData[0].model_id);
     } else {
       setSelectedVoice("");
     }
@@ -80,6 +88,18 @@ export function BasicTTS() {
           voice_id: selectedVoice,
           speed: speed[0],
           pitch: pitch[0],
+        };
+      }
+      
+      // 如果是 ATEN 服務，添加語音配置
+      if (service === "service3") {
+        requestBody.language = "zh-TW";
+        requestBody.voice_config = {
+          voice_name: selectedVoice,
+          pitch: pitch[0] / 6, // 轉換為 ATEN 的 -2~+2 範圍
+          rate: speed[0],
+          volume: (volume[0] - 1) * 6, // 轉換為 ATEN 的 -6~+6 範圍
+          silence_scale: 1.0,
         };
       }
 
@@ -211,6 +231,41 @@ export function BasicTTS() {
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-700">
                     正在載入音色列表...請確認 MiniMax 服務已啟動
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ATEN 音色選擇 */}
+          {selectedService === "service3" && (
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">選擇 ATEN 聲優</Label>
+              {voicesData && voicesData.length > 0 ? (
+                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="選擇聲優" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {voicesData.map((voice: any) => (
+                      <SelectItem key={voice.model_id} value={voice.model_id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                            <Volume2 className="h-4 w-4 text-purple-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{voice.name || voice.model_id}</div>
+                            <div className="text-sm text-gray-500">{voice.description || 'ATEN 專業聲優'}</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-700">
+                    正在載入聲優列表...請確認 ATEN AIVoice 服務已啟動
                   </p>
                 </div>
               )}

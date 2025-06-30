@@ -15,13 +15,43 @@ export function CharacterModelCreation() {
     name: "",
   });
   const [trainingFiles, setTrainingFiles] = useState<string[]>([]);
+  const [actualFiles, setActualFiles] = useState<File[]>([]); // 保存實際檔案對象
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const createModelMutation = useMutation({
-    mutationFn: async (modelData: InsertModel) => {
-      const response = await apiRequest("POST", "/api/models", modelData);
+    mutationFn: async (modelData: InsertModel & { actualFiles?: File[] }) => {
+      let uploadedFileNames: string[] = [];
+      
+      // 如果有實際檔案，先上傳檔案
+      if (modelData.actualFiles && modelData.actualFiles.length > 0) {
+        const formData = new FormData();
+        modelData.actualFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error('檔案上傳失敗');
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        uploadedFileNames = uploadResult.files.map((f: any) => f.filename);
+      }
+      
+      // 創建模特記錄，使用上傳後的檔案名稱
+      const finalModelData = {
+        ...modelData,
+        trainingFiles: uploadedFileNames.length > 0 ? uploadedFileNames : modelData.trainingFiles,
+      };
+      delete finalModelData.actualFiles; // 移除臨時屬性
+      
+      const response = await apiRequest("POST", "/api/models", finalModelData);
       return response.json();
     },
     onSuccess: () => {
@@ -34,26 +64,27 @@ export function CharacterModelCreation() {
       setCharacterModel({ name: "" });
       setTrainingFiles([]);
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: "創建失敗",
-        description: "請檢查輸入信息後重試",
+        description: error.message || "請檢查輸入信息後重試",
         variant: "destructive",
       });
     },
   });
 
   const handleCreateModel = () => {
-    const modelData: InsertModel = {
+    const modelData = {
       name: characterModel.name,
-      type: "character",
-      provider: "heygem",
+      type: "character" as const,
+      provider: "heygem" as const,
       language: "zh-TW",
       description: "人物模特",
-      status: "ready",
+      status: "ready" as const,
       voiceSettings: null,
       characterSettings: null,
       trainingFiles: trainingFiles,
+      actualFiles: actualFiles, // 使用保存的實際檔案
     };
 
     createModelMutation.mutate(modelData);
@@ -102,6 +133,7 @@ export function CharacterModelCreation() {
               accept=".mp4,.avi,.mov,.mkv"
               multiple={false}
               onFilesChange={setTrainingFiles}
+              onActualFilesChange={setActualFiles}
               description="上傳人物影片，支持 MP4, AVI, MOV 格式，最大 100MB"
             />
           </div>

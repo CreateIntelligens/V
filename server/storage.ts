@@ -9,10 +9,10 @@ export interface IStorage {
   
   // Model operations
   getModels(): Promise<Model[]>;
-  getModel(id: number): Promise<Model | undefined>;
+  getModel(id: number | string): Promise<Model | undefined>;
   createModel(model: InsertModel): Promise<Model>;
-  updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined>;
-  deleteModel(id: number): Promise<boolean>;
+  updateModel(id: number | string, updates: Partial<Model>): Promise<Model | undefined>;
+  deleteModel(id: number | string): Promise<boolean>;
   
   // Generated content operations
   getGeneratedContent(): Promise<GeneratedContent[]>;
@@ -272,7 +272,7 @@ export class JsonStorage implements IStorage {
     }
   }
 
-  async getModel(id: number): Promise<Model | undefined> {
+  async getModel(id: number | string): Promise<Model | undefined> {
     const models = await this.getModels();
     return models.find(m => m.id === id.toString() || m.id === id);
   }
@@ -291,9 +291,9 @@ export class JsonStorage implements IStorage {
     return newModel;
   }
 
-  async updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined> {
+  async updateModel(id: number | string, updates: Partial<Model>): Promise<Model | undefined> {
     const models = await this.getModels();
-    const index = models.findIndex(m => m.id === id);
+    const index = models.findIndex(m => m.id === id.toString() || m.id === id);
     if (index === -1) return undefined;
     
     models[index] = { ...models[index], ...updates, updatedAt: new Date() };
@@ -301,9 +301,9 @@ export class JsonStorage implements IStorage {
     return models[index];
   }
 
-  async deleteModel(id: number): Promise<boolean> {
+  async deleteModel(id: number | string): Promise<boolean> {
     const models = await this.getModels();
-    const index = models.findIndex(m => m.id === id);
+    const index = models.findIndex(m => m.id === id.toString() || m.id === id);
     if (index === -1) return false;
     
     models.splice(index, 1);
