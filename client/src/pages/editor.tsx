@@ -542,52 +542,54 @@ export default function VideoEditor() {
                   {/* TTS 提供商選擇 (基礎TTS 模式) */}
                   {voiceGenerationType === "basic_tts" && (
                     <div className="space-y-4">
-                      <div>
-                        <Label className="text-base font-semibold">選擇 TTS 提供商</Label>
-                        <Select value={selectedTTSProvider} onValueChange={(value) => {
-                          setSelectedTTSProvider(value);
-                          // 設置該提供商的預設聲音
-                          const defaultVoice = ttsVoices[value as keyof typeof ttsVoices]?.[0]?.id || "";
-                          setSelectedTTSModel(defaultVoice);
-                        }}>
-                          <SelectTrigger className="mt-2">
-                            <SelectValue placeholder="選擇 TTS 提供商" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ttsProviders.map((provider) => (
-                              <SelectItem key={provider.id} value={provider.id}>
-                                <div className="flex flex-col items-start w-full">
-                                  <span className="font-medium text-left">{provider.name}</span>
-                                  <span className="text-xs text-gray-500 text-left">{provider.description}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {selectedTTSProvider && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-base font-semibold">選擇聲音</Label>
-                          <Select value={selectedTTSModel} onValueChange={setSelectedTTSModel}>
+                          <Label className="text-base font-semibold">選擇 TTS 提供商</Label>
+                          <Select value={selectedTTSProvider} onValueChange={(value) => {
+                            setSelectedTTSProvider(value);
+                            // 設置該提供商的預設聲音
+                            const defaultVoice = ttsVoices[value as keyof typeof ttsVoices]?.[0]?.id || "";
+                            setSelectedTTSModel(defaultVoice);
+                          }}>
                             <SelectTrigger className="mt-2">
-                              <SelectValue placeholder="選擇聲音" />
+                              <SelectValue placeholder="選擇 TTS 提供商" />
                             </SelectTrigger>
                             <SelectContent>
-                              {ttsVoices[selectedTTSProvider as keyof typeof ttsVoices]?.map((voice) => (
-                                <SelectItem key={voice.id} value={voice.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">
-                                      {voice.language}
-                                    </span>
-                                    <span>{voice.name}</span>
+                              {ttsProviders.map((provider) => (
+                                <SelectItem key={provider.id} value={provider.id}>
+                                  <div className="flex flex-col items-start w-full">
+                                    <span className="font-medium text-left">{provider.name}</span>
+                                    <span className="text-xs text-gray-500 text-left">{provider.description}</span>
                                   </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
-                      )}
+
+                        {selectedTTSProvider && (
+                          <div>
+                            <Label className="text-base font-semibold">選擇聲音</Label>
+                            <Select value={selectedTTSModel} onValueChange={setSelectedTTSModel}>
+                              <SelectTrigger className="mt-2">
+                                <SelectValue placeholder="選擇聲音" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ttsVoices[selectedTTSProvider as keyof typeof ttsVoices]?.map((voice) => (
+                                  <SelectItem key={voice.id} value={voice.id}>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">
+                                        {voice.language}
+                                      </span>
+                                      <span>{voice.name}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
 
                       {/* MiniMax 進階設定 */}
                       {selectedTTSProvider === "minimax" && (
@@ -890,7 +892,7 @@ export default function VideoEditor() {
                   {/* 語音生成方式選擇 */}
                   <div>
                     <Label className="text-base font-semibold">語音生成方式</Label>
-                    <div className="grid grid-cols-1 gap-3 mt-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                       <Card
                         className={`cursor-pointer transition-all ${voiceGenerationType === "basic_tts"
                             ? 'ring-2 ring-primary border-primary'
