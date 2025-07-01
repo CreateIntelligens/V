@@ -13,7 +13,9 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout>();
 
   // 檢查 src 是否有效
   if (!src || src === 'undefined' || src === 'null') {
@@ -42,23 +44,40 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     console.log('AudioPlayer: 載入音頻', { src, fullAudioUrl });
     setError(null);
     setIsLoading(true);
+    setRetryCount(0); // 重置重試計數
 
     const updateTime = () => setCurrentTime(audio.currentTime);
     const updateDuration = () => {
       setDuration(audio.duration);
       setIsLoading(false);
+      setRetryCount(0); // 重置重試計數
       console.log('AudioPlayer: 音頻載入完成', { duration: audio.duration, src });
     };
     
     const handleError = (e: Event) => {
-      console.error('AudioPlayer: 音頻載入錯誤', e, { src });
-      setError('音頻載入失敗');
-      setIsLoading(false);
+      console.error('AudioPlayer: 音頻載入錯誤', e, { src, retryCount });
+      
+      // 如果重試次數少於3次，等待2秒後重試
+      if (retryCount < 3) {
+        console.log(`AudioPlayer: 準備重試 (${retryCount + 1}/3)`, { src });
+        setRetryCount(prev => prev + 1);
+        
+        retryTimeoutRef.current = setTimeout(() => {
+          console.log(`AudioPlayer: 執行重試 ${retryCount + 1}`, { src });
+          if (audio) {
+            audio.load();
+          }
+        }, 2000);
+      } else {
+        setError('音頻載入失敗');
+        setIsLoading(false);
+      }
     };
 
     const handleCanPlay = () => {
       console.log('AudioPlayer: 音頻可以播放', { src });
       setIsLoading(false);
+      setRetryCount(0); // 重置重試計數
     };
 
     audio.addEventListener("timeupdate", updateTime);
@@ -71,13 +90,18 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     audio.load();
 
     return () => {
+      // 清除重試定時器
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      
       audio.removeEventListener("timeupdate", updateTime);
       audio.removeEventListener("loadedmetadata", updateDuration);
       audio.removeEventListener("ended", () => setIsPlaying(false));
       audio.removeEventListener("error", handleError);
       audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [src, fullAudioUrl]);
+  }, [src, fullAudioUrl, retryCount]);
 
   const togglePlay = () => {
     const audio = audioRef.current;

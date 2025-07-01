@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { AudioPlayer } from "@/components/audio-player";
-import { MicOff, Video, Download, Star, Play, Settings, Zap } from "lucide-react";
+import { VideoModal } from "@/components/video-modal";
+import { MicOff, Video, Download, Star, Play, Settings, Zap, Expand } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useQuery } from "@tanstack/react-query";
@@ -30,10 +31,22 @@ export default function VideoEditor() {
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [videoProgress, setVideoProgress] = useState(0);
-  const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
-  const [generatedAudioId, setGeneratedAudioId] = useState<string | null>(null);
-  const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
-  const [generatedVideoId, setGeneratedVideoId] = useState<string | null>(null);
+  const [generatedAudio, setGeneratedAudio] = useState<string | null>(() => {
+    const saved = sessionStorage.getItem('generatedAudio');
+    return saved || null;
+  });
+  const [generatedAudioId, setGeneratedAudioId] = useState<string | null>(() => {
+    const saved = sessionStorage.getItem('generatedAudioId');
+    return saved || null;
+  });
+  const [generatedVideo, setGeneratedVideo] = useState<string | null>(() => {
+    const saved = sessionStorage.getItem('generatedVideo');
+    return saved || null;
+  });
+  const [generatedVideoId, setGeneratedVideoId] = useState<string | null>(() => {
+    const saved = sessionStorage.getItem('generatedVideoId');
+    return saved || null;
+  });
   const [selectedVoiceModelId, setSelectedVoiceModelId] = useState<string>("");
   const [selectedGeneratedAudioId, setSelectedGeneratedAudioId] = useState<string>("");
 
@@ -50,9 +63,26 @@ export default function VideoEditor() {
   const [atenRate, setAtenRate] = useState([1.0]);
   const [atenVolume, setAtenVolume] = useState([0]);
   const [atenSilenceScale, setAtenSilenceScale] = useState([1.0]);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // 監聽頁面刷新時清除 sessionStorage（這樣刷新後會清除狀態）
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // 只有在真正刷新頁面時才清除，而不是切換頁面
+      if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+        sessionStorage.removeItem('generatedVideo');
+        sessionStorage.removeItem('generatedVideoId');
+        sessionStorage.removeItem('generatedAudio');
+        sessionStorage.removeItem('generatedAudioId');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
 
   // 收藏/取消收藏
   const toggleFavoriteMutation = useMutation({
@@ -167,6 +197,11 @@ export default function VideoEditor() {
     onSuccess: (data) => {
       setGeneratingAudio(true);
       setAudioProgress(0);
+      // 清除之前的音頻狀態
+      setGeneratedAudio(null);
+      setGeneratedAudioId(null);
+      sessionStorage.removeItem('generatedAudio');
+      sessionStorage.removeItem('generatedAudioId');
 
       const interval = setInterval(() => {
         setAudioProgress(prev => {
@@ -177,6 +212,9 @@ export default function VideoEditor() {
             if (data?.data?.audioUrl) {
               setGeneratedAudio(data.data.audioUrl);
               setGeneratedAudioId(data.data.id);
+              // 保存到 sessionStorage
+              sessionStorage.setItem('generatedAudio', data.data.audioUrl);
+              sessionStorage.setItem('generatedAudioId', data.data.id);
               toast({
                 title: "語音生成完成",
                 description: "您的語音內容已準備好",
@@ -214,6 +252,11 @@ export default function VideoEditor() {
     onSuccess: (data) => {
       setGeneratingVideo(true);
       setVideoProgress(0);
+      // 清除之前的影片狀態
+      setGeneratedVideo(null);
+      setGeneratedVideoId(null);
+      sessionStorage.removeItem('generatedVideo');
+      sessionStorage.removeItem('generatedVideoId');
 
       const taskCode = data.data.taskCode;
       console.log(`🎬 開始監控影片生成進度: ${taskCode}`);
@@ -242,8 +285,12 @@ export default function VideoEditor() {
               // 影片生成完成 (status === 2 表示完成)
               setGeneratingVideo(false);
               setVideoProgress(100);
-              setGeneratedVideo(data.video_url || `/videos/${data.result}`);
+              const videoUrl = data.video_url || `/videos/${data.result}`;
+              setGeneratedVideo(videoUrl);
               setGeneratedVideoId(taskCode);
+              // 保存到 sessionStorage
+              sessionStorage.setItem('generatedVideo', videoUrl);
+              sessionStorage.setItem('generatedVideoId', taskCode);
               toast({
                 title: "影片生成完成",
                 description: "您的 AI 影片已準備好",
@@ -288,6 +335,9 @@ export default function VideoEditor() {
                     setVideoProgress(100);
                     setGeneratedVideo(contentData.data.outputPath);
                     setGeneratedVideoId(contentData.data.id);
+                    // 保存到 sessionStorage
+                    sessionStorage.setItem('generatedVideo', contentData.data.outputPath);
+                    sessionStorage.setItem('generatedVideoId', contentData.data.id);
                     toast({
                       title: "影片生成完成",
                       description: "您的 AI 影片已準備好",
@@ -560,7 +610,20 @@ export default function VideoEditor() {
                               <Star className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              if (generatedAudio) {
+                                const link = document.createElement('a');
+                                link.href = generatedAudio;
+                                link.download = `ai-audio-${Date.now()}.wav`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                          >
                             <Download className="h-4 w-4" />
                           </Button>
                         </div>
@@ -662,11 +725,11 @@ export default function VideoEditor() {
 
                   <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
                     {generatedVideo ? (
-                      <div className="w-full h-full">
+                      <div className="w-full h-full relative group">
                         <video
                           src={generatedVideo}
                           controls
-                          className="w-full h-full rounded-lg object-cover"
+                          className="w-full h-full rounded-lg object-contain"
                           onError={(e) => {
                             console.error('影片載入失敗:', e);
                             toast({
@@ -678,6 +741,16 @@ export default function VideoEditor() {
                         >
                           您的瀏覽器不支援影片播放
                         </video>
+                        
+                        {/* 放大按鈕 */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setVideoModalOpen(true)}
+                        >
+                          <Expand className="h-4 w-4" />
+                        </Button>
                         <div className="flex items-center justify-between mt-3">
                           <span className="text-sm font-medium text-gray-700">影片預覽</span>
                           <div className="flex items-center space-x-2">
@@ -691,7 +764,20 @@ export default function VideoEditor() {
                                 <Star className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                if (generatedVideo) {
+                                  const link = document.createElement('a');
+                                  link.href = generatedVideo;
+                                  link.download = `ai-video-${Date.now()}.mp4`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }
+                              }}
+                            >
                               <Download className="h-4 w-4" />
                             </Button>
                           </div>
@@ -711,6 +797,26 @@ export default function VideoEditor() {
         </TabsContent>
 
       </Tabs>
+
+      {/* 影片放大模態框 */}
+      {generatedVideo && (
+        <VideoModal
+          src={generatedVideo}
+          title="AI 生成影片預覽"
+          isOpen={videoModalOpen}
+          onClose={() => setVideoModalOpen(false)}
+          onDownload={() => {
+            if (generatedVideo) {
+              const link = document.createElement('a');
+              link.href = generatedVideo;
+              link.download = `ai-video-${Date.now()}.mp4`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -989,93 +989,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // 如果任務完成 (status === 2) 或者 Face2Face 返回 code 10004（任務不存在，可能已完成）
           if (taskStatus === 2 || face2faceResult.code === 10004) {
             try {
-              // 檢查是否有結果檔案
-              const { exec } = await import('child_process');
-              const checkCommand = `docker exec heygem-gen-video sh -c "ls -la /code/data/temp/${taskCode}-r.mp4"`;
+              // 檢查本地結果檔案是否存在（因為Docker volume已掛載到本地）
+              const resultFileName = `${taskCode}-r.mp4`;
+              const newVideoName = `generated_video_${contentId}.mp4`;
+              const tempVideoPath = path.join(process.cwd(), 'data', 'temp', resultFileName);
+              const localVideoPath = path.join(process.cwd(), 'data', 'videos', newVideoName);
               
-              exec(checkCommand, async (error: any, stdout: any, stderr: any) => {
-                if (!error && stdout.trim()) {
-                  // 找到結果檔案
-                  const resultFileName = `${taskCode}-r.mp4`;
-                  const newVideoName = `generated_video_${contentId}.mp4`;
-                  const localVideoPath = path.join(process.cwd(), 'data', 'videos', newVideoName);
-                  
-                  // 確保目錄存在
-                  await fs.ensureDir(path.dirname(localVideoPath));
-                  
-                  // 複製結果檔案
-                  const copyCommand = `docker cp heygem-gen-video:/code/data/temp/${resultFileName} "${localVideoPath}"`;
-                  
-                  exec(copyCommand, async (copyError: any, copyStdout: any, copyStderr: any) => {
-                    if (copyError) {
-                      console.error(`檔案複製失敗: ${copyError}`);
-                    } else {
-                      console.log(`✅ 影片已複製到: ${localVideoPath}`);
+              if (await fs.pathExists(tempVideoPath)) {
+                // 確保目錄存在
+                await fs.ensureDir(path.dirname(localVideoPath));
+                
+                // 直接複製本地檔案（不使用docker cp）
+                try {
+                  await fs.copy(tempVideoPath, localVideoPath);
+                  console.log(`✅ 影片已複製到: ${localVideoPath}`);
                       
                       // 獲取影片時長
-                      let videoDuration = 12; // 預設時長
-                      try {
-                        const ffprobeCommand = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${localVideoPath}"`;
-                        exec(ffprobeCommand, (ffprobeError: any, ffprobeStdout: any) => {
-                          if (!ffprobeError && ffprobeStdout.trim()) {
-                            videoDuration = Math.round(parseFloat(ffprobeStdout.trim()));
-                          }
-                        });
-                      } catch (ffprobeError) {
-                        console.log('無法獲取影片時長，使用預設值');
+                  let videoDuration = 12; // 預設時長
+                  try {
+                    const { exec } = await import('child_process');
+                    const ffprobeCommand = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${localVideoPath}"`;
+                    exec(ffprobeCommand, (ffprobeError: any, ffprobeStdout: any) => {
+                      if (!ffprobeError && ffprobeStdout.trim()) {
+                        videoDuration = Math.round(parseFloat(ffprobeStdout.trim()));
                       }
+                    });
+                  } catch (ffprobeError) {
+                    console.log('無法獲取影片時長，使用預設值');
+                  }
+                  
+                  // 複製臨時音頻文件到最終位置供用戶下載
+                  try {
+                    const tempAudioPath = path.join(process.cwd(), 'data', 'audios', `temp_audio_${contentId}.wav`);
+                    const finalAudioPath = path.join(process.cwd(), 'data', 'audios', `audio_${contentId}.wav`);
+                    
+                    if (await fs.pathExists(tempAudioPath)) {
+                      await fs.copy(tempAudioPath, finalAudioPath);
+                      console.log(`🎵 已複製音頻文件: ${tempAudioPath} -> ${finalAudioPath}`);
                       
-                      // 複製臨時音頻文件到最終位置供用戶下載
-                      try {
-                        const tempAudioPath = path.join(process.cwd(), 'data', 'audios', `temp_audio_${contentId}.wav`);
-                        const finalAudioPath = path.join(process.cwd(), 'data', 'audios', `audio_${contentId}.wav`);
-                        
-                        if (await fs.pathExists(tempAudioPath)) {
-                          await fs.copy(tempAudioPath, finalAudioPath);
-                          console.log(`🎵 已複製音頻文件: ${tempAudioPath} -> ${finalAudioPath}`);
-                          
-                          // 清理臨時音頻文件
-                          await fs.remove(tempAudioPath);
-                          console.log(`🧹 已清理臨時音頻文件: ${tempAudioPath}`);
-                        }
-                      } catch (audioCopyError) {
-                        console.error(`音頻文件複製失敗: ${audioCopyError}`);
-                      }
-
-                      // 更新資料庫狀態為完成
-                      try {
-                        await storage.updateGeneratedContent(contentId, {
-                          status: "completed",
-                          outputPath: `/videos/${newVideoName}`,
-                          duration: videoDuration
-                        });
-                        console.log(`✅ 資料庫狀態已更新: ${contentId} -> completed`);
-                        
-                        // 更新回應數據
-                        face2faceResult.data.status = 2;
-                        face2faceResult.data.result = resultFileName;
-                        face2faceResult.data.video_url = `/videos/${newVideoName}`;
-                        face2faceResult.data.local_path = localVideoPath;
-                        
-                      } catch (updateError) {
-                        console.error(`資料庫更新失敗: ${updateError}`);
-                      }
-                      
-                      // 清理 Face2Face 臨時檔案
-                      const cleanupCommand = `docker exec heygem-gen-video sh -c "rm -f /code/data/temp/${taskCode}*"`;
-                      exec(cleanupCommand, (cleanupError: any) => {
-                        if (cleanupError) {
-                          console.error(`清理失敗: ${cleanupError}`);
-                        } else {
-                          console.log(`🧹 已清理臨時檔案: ${taskCode}*`);
-                        }
-                      });
+                      // 清理臨時音頻文件
+                      await fs.remove(tempAudioPath);
+                      console.log(`🧹 已清理臨時音頻文件: ${tempAudioPath}`);
                     }
-                  });
-                } else {
-                  console.log(`⚠️ 未找到結果檔案: ${taskCode}-r.mp4`);
+                  } catch (audioCopyError) {
+                    console.error(`音頻文件複製失敗: ${audioCopyError}`);
+                  }
+
+                  // 更新資料庫狀態為完成
+                  try {
+                    await storage.updateGeneratedContent(contentId, {
+                      status: "completed",
+                      outputPath: `/videos/${newVideoName}`,
+                      duration: videoDuration
+                    });
+                    console.log(`✅ 資料庫狀態已更新: ${contentId} -> completed`);
+                    
+                    // 更新回應數據
+                    face2faceResult.data.status = 2;
+                    face2faceResult.data.result = resultFileName;
+                    face2faceResult.data.video_url = `/videos/${newVideoName}`;
+                    face2faceResult.data.local_path = localVideoPath;
+                    
+                  } catch (updateError) {
+                    console.error(`資料庫更新失敗: ${updateError}`);
+                  }
+                  
+                  // 清理臨時檔案
+                  try {
+                    await fs.remove(tempVideoPath);
+                    console.log(`🧹 已清理臨時檔案: ${tempVideoPath}`);
+                  } catch (cleanupError) {
+                    console.error(`清理失敗: ${cleanupError}`);
+                  }
+                  
+                } catch (copyError) {
+                  console.error(`檔案複製失敗: ${copyError}`);
                 }
-              });
+              } else {
+                console.log(`⚠️ 未找到結果檔案: ${tempVideoPath}`);
+              }
               
             } catch (error) {
               console.error('處理結果檔案失敗:', error);

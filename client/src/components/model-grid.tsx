@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight, Play, Pause, Video } from "lucide-react";
+import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight, Play, Pause, Video, Expand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { VideoModal } from "@/components/video-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useRef } from "react";
@@ -15,6 +16,7 @@ export function ModelGrid({ models }: ModelGridProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [playingAudio, setPlayingAudio] = useState<number | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<{ src: string; title: string; id: string } | null>(null);
   const audioRefs = useRef<{ [key: number]: HTMLAudioElement }>({});
 
   // 確保 models 是陣列
@@ -179,10 +181,10 @@ export function ModelGrid({ models }: ModelGridProps) {
                 {/* 人物模型影片預覽 */}
                 {model.type === "character" && model.trainingFiles && model.trainingFiles.length > 0 && (
                   <div className="mb-3">
-                    <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden relative">
+                    <div className="w-full h-32 bg-gray-100 rounded-lg overflow-hidden relative group cursor-pointer">
                       <video
                         src={getVideoPreview(model.trainingFiles[0])}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                         muted
                         preload="metadata"
                         onError={(e) => {
@@ -220,6 +222,24 @@ export function ModelGrid({ models }: ModelGridProps) {
                           video.currentTime = 0;
                         }}
                       />
+                      
+                      {/* 放大按鈕 */}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedVideo({
+                            src: getVideoPreview(model.trainingFiles[0]),
+                            title: `${model.name} - 人物模特預覽`,
+                            id: model.id.toString()
+                          });
+                        }}
+                      >
+                        <Expand className="h-3 w-3" />
+                      </Button>
+                      
                       <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded flex items-center">
                         <Video className="w-3 h-3 mr-1" />
                         影片
@@ -254,6 +274,16 @@ export function ModelGrid({ models }: ModelGridProps) {
           </CardContent>
         </Card>
       </div>
+      
+      {/* 影片放大模態框 */}
+      {selectedVideo && (
+        <VideoModal
+          src={selectedVideo.src}
+          title={selectedVideo.title}
+          isOpen={!!selectedVideo}
+          onClose={() => setSelectedVideo(null)}
+        />
+      )}
     </section>
   );
 }

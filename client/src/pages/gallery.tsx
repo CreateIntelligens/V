@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Video, Music, Download, Share, Trash2, Search, Grid, List, Star } from "lucide-react";
+import { Video, Music, Download, Share, Trash2, Search, Grid, List, Star, Expand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AudioPlayer } from "@/components/audio-player";
+import { VideoModal } from "@/components/video-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,6 +32,7 @@ export default function Gallery() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState("newest");
+  const [selectedVideo, setSelectedVideo] = useState<{ src: string; title: string; id: string } | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -368,7 +370,7 @@ export default function Gallery() {
                     )}
 
                     {item.type === 'video' && item.status === 'completed' && item.outputPath && (
-                      <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden flex items-center justify-center">
+                      <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden flex items-center justify-center relative group cursor-pointer">
                         <video 
                           src={item.outputPath}
                           controls 
@@ -380,6 +382,23 @@ export default function Gallery() {
                         >
                           您的瀏覽器不支援影片播放
                         </video>
+                        
+                        {/* 放大按鈕 */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedVideo({
+                              src: item.outputPath,
+                              title: `影片 - ${item.inputText?.slice(0, 30)}${item.inputText?.length > 30 ? '...' : ''}`,
+                              id: item.id
+                            });
+                          }}
+                        >
+                          <Expand className="h-4 w-4" />
+                        </Button>
                       </div>
                     )}
 
@@ -403,7 +422,21 @@ export default function Gallery() {
                     <div className="flex space-x-2">
                       {item.status === 'completed' && (
                         <>
-                          <Button variant="outline" size="sm" className="flex-1">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1"
+                            onClick={() => {
+                              if (item.outputPath) {
+                                const link = document.createElement('a');
+                                link.href = item.outputPath;
+                                link.download = `video-${item.id}-${Date.now()}.mp4`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
+                            }}
+                          >
                             <Download className="mr-2 h-4 w-4" />
                             下載
                           </Button>
@@ -476,7 +509,21 @@ export default function Gallery() {
                       <div className="flex space-x-2">
                         {item.status === 'completed' && (
                           <>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                if (item.outputPath) {
+                                  const link = document.createElement('a');
+                                  link.href = item.outputPath;
+                                  const fileExtension = item.type === 'audio' ? 'wav' : 'mp4';
+                                  link.download = `${item.type}-${item.id}-${Date.now()}.${fileExtension}`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }
+                              }}
+                            >
                               <Download className="mr-2 h-4 w-4" />
                               下載
                             </Button>
@@ -567,7 +614,21 @@ export default function Gallery() {
                     </div>
 
                     <div className="flex space-x-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => {
+                          if (item.outputPath) {
+                            const link = document.createElement('a');
+                            link.href = item.outputPath;
+                            link.download = `audio-${item.id}-${Date.now()}.wav`;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }
+                        }}
+                      >
                         <Download className="mr-2 h-4 w-4" />
                         下載
                       </Button>
@@ -583,6 +644,26 @@ export default function Gallery() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* 影片放大模態框 */}
+      {selectedVideo && (
+        <VideoModal
+          src={selectedVideo.src}
+          title={selectedVideo.title}
+          isOpen={!!selectedVideo}
+          onClose={() => setSelectedVideo(null)}
+          onDownload={() => {
+            if (selectedVideo) {
+              const link = document.createElement('a');
+              link.href = selectedVideo.src;
+              link.download = `video-${selectedVideo.id}-${Date.now()}.mp4`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
