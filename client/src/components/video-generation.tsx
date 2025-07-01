@@ -32,7 +32,7 @@ const EDGETTS_VOICES = [
 
 export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
   const { toast } = useToast();
-  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("1751016573603");
   const [selectedProvider, setSelectedProvider] = useState<string>("edgetts");
   const [selectedVoice, setSelectedVoice] = useState<string>("zh-CN-XiaoxiaoNeural");
   const [textInput, setTextInput] = useState("");
@@ -42,10 +42,47 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
   const [taskCode, setTaskCode] = useState<string>("");
 
   // 獲取可用的人物模型
-  const { data: modelsData } = useQuery({
+  const { data: modelsData, isLoading, error } = useQuery({
     queryKey: ["/api/models"],
     select: (data: any) => data?.data?.list || [],
   });
+
+  // 載入保存的選擇
+  useEffect(() => {
+    const savedModel = localStorage.getItem('selectedVideoModel');
+    const savedProvider = localStorage.getItem('selectedVideoProvider');
+    const savedVoice = localStorage.getItem('selectedVideoVoice');
+    
+    if (savedModel) {
+      setSelectedModel(savedModel);
+    }
+    if (savedProvider && TTS_PROVIDERS.find(p => p.id === savedProvider)) {
+      setSelectedProvider(savedProvider);
+    }
+    if (savedVoice && EDGETTS_VOICES.find(v => v.id === savedVoice)) {
+      setSelectedVoice(savedVoice);
+    }
+  }, []);
+
+  // 記住用戶的選擇
+  useEffect(() => {
+    if (selectedModel) {
+      localStorage.setItem('selectedVideoModel', selectedModel);
+    }
+  }, [selectedModel]);
+
+  useEffect(() => {
+    if (selectedProvider) {
+      localStorage.setItem('selectedVideoProvider', selectedProvider);
+    }
+  }, [selectedProvider]);
+
+  useEffect(() => {
+    if (selectedVoice) {
+      localStorage.setItem('selectedVideoVoice', selectedVoice);
+    }
+  }, [selectedVoice]);
+
 
   // 本地影片生成
   const generateVideoMutation = useMutation({
@@ -75,13 +112,22 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
               clearInterval(interval);
               setIsGenerating(false);
               setGenerationProgress(100);
-              setGeneratedVideoUrl(result.data.video_url);
+              
+              // 確保影片 URL 是完整的
+              let videoUrl = result.data.video_url;
+              if (videoUrl && !videoUrl.startsWith('http')) {
+                // 如果是相對路徑，轉換為完整 URL
+                const baseUrl = window.location.origin;
+                videoUrl = `${baseUrl}${videoUrl.startsWith('/') ? '' : '/'}${videoUrl}`;
+              }
+              
+              setGeneratedVideoUrl(videoUrl);
               toast({
                 title: "影片生成完成",
                 description: "您的 AI 影片已準備好",
               });
               if (onVideoGenerated) {
-                onVideoGenerated(result.data.video_url);
+                onVideoGenerated(videoUrl);
               }
             } else if (result.code === 10001) {
               // 還在處理中
@@ -167,100 +213,103 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* 語音生成方式 - 三個小框框橫向排列 */}
-          <div className="space-y-4">
-            <Label className="text-base font-semibold">語音生成方式</Label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 人物模型選擇 */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <User className="h-4 w-4 text-blue-600" />
-                  選擇人物模型
-                </Label>
-                <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="選擇模型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelsData?.map((model: any) => (
-                      <SelectItem key={model.id} value={model.id.toString()}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                            <User className="h-3 w-3 text-blue-600" />
-                          </div>
-                          <span className="text-sm">{model.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedModelData && (
-                  <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                    {selectedModelData.name}
-                  </div>
-                )}
+          {/* 人物模型選擇 */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold flex items-center gap-2">
+              <User className="h-4 w-4 text-blue-600" />
+              選擇人物模型
+            </Label>
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger>
+                <SelectValue placeholder="選擇模型" />
+              </SelectTrigger>
+              <SelectContent>
+                {modelsData?.map((model: any) => (
+                  <SelectItem key={model.id} value={model.id.toString()}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <User className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{model.name}</div>
+                        <div className="text-sm text-gray-500">{model.description || '人物模特'}</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedModelData && (
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                {selectedModelData.name}
               </div>
+            )}
+          </div>
 
-              {/* TTS 提供商選擇 */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <Mic className="h-4 w-4 text-green-600" />
-                  選擇 TTS 提供商
-                </Label>
-                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="選擇提供商" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TTS_PROVIDERS.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
-                            <Mic className="h-3 w-3 text-green-600" />
-                          </div>
-                          <span className="text-sm">{provider.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedProviderData && (
-                  <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
-                    {selectedProviderData.name}
-                  </div>
-                )}
+          {/* TTS 提供商選擇 */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold flex items-center gap-2">
+              <Mic className="h-4 w-4 text-green-600" />
+              選擇 TTS 提供商
+            </Label>
+            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+              <SelectTrigger>
+                <SelectValue placeholder="選擇提供商" />
+              </SelectTrigger>
+              <SelectContent>
+                {TTS_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <Mic className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{provider.name}</div>
+                        <div className="text-sm text-gray-500">{provider.description}</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedProviderData && (
+              <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
+                {selectedProviderData.name}
               </div>
+            )}
+          </div>
 
-              {/* 聲音選擇 */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium flex items-center gap-2">
-                  <Play className="h-4 w-4 text-purple-600" />
-                  選擇聲音
-                </Label>
-                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="選擇聲音" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EDGETTS_VOICES.map((voice) => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                            <Play className="h-3 w-3 text-purple-600" />
-                          </div>
-                          <span className="text-sm">{voice.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedVoiceData && (
-                  <div className="p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-700">
-                    {selectedVoiceData.name}
-                  </div>
-                )}
+          {/* 聲音選擇 */}
+          <div className="space-y-3">
+            <Label className="text-base font-semibold flex items-center gap-2">
+              <Play className="h-4 w-4 text-purple-600" />
+              選擇聲音
+            </Label>
+            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+              <SelectTrigger>
+                <SelectValue placeholder="選擇聲音" />
+              </SelectTrigger>
+              <SelectContent>
+                {EDGETTS_VOICES.map((voice) => (
+                  <SelectItem key={voice.id} value={voice.id}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                        <Play className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{voice.name}</div>
+                        <div className="text-sm text-gray-500">{voice.language}</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedVoiceData && (
+              <div className="p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-700">
+                {selectedVoiceData.name}
               </div>
-            </div>
+            )}
           </div>
 
           {/* 文字內容 */}
@@ -283,24 +332,26 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
           </div>
 
           {/* 生成按鈕 */}
-          <Button
-            onClick={handleGenerateVideo}
-            disabled={isGenerating || generateVideoMutation.isPending}
-            className="w-full bg-blue-600 hover:bg-blue-700"
-            size="lg"
-          >
-            {isGenerating || generateVideoMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                生成中...
-              </>
-            ) : (
-              <>
-                <Video className="mr-2 h-5 w-5" />
-                生成 AI 影片
-              </>
-            )}
-          </Button>
+          <div className="flex justify-center">
+            <Button
+              onClick={handleGenerateVideo}
+              disabled={isGenerating || generateVideoMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700 px-8"
+              size="lg"
+            >
+              {isGenerating || generateVideoMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <Video className="mr-2 h-5 w-5" />
+                  生成 AI 影片
+                </>
+              )}
+            </Button>
+          </div>
 
           {/* 生成進度 */}
           {isGenerating && (
@@ -336,15 +387,58 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
                   您的瀏覽器不支援影片播放
                 </video>
                 <div className="flex gap-2 justify-center">
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const video = document.querySelector('video');
+                      if (video) {
+                        if (video.paused) {
+                          video.play();
+                        } else {
+                          video.pause();
+                        }
+                      }
+                    }}
+                  >
                     <Play className="mr-2 h-4 w-4" />
-                    播放
+                    播放/暫停
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      if (generatedVideoUrl) {
+                        const link = document.createElement('a');
+                        link.href = generatedVideoUrl;
+                        link.download = `ai-video-${Date.now()}.mp4`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }
+                    }}
+                  >
                     <Download className="mr-2 h-4 w-4" />
                     下載影片
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      if (navigator.share && generatedVideoUrl) {
+                        navigator.share({
+                          title: 'AI 生成影片',
+                          url: generatedVideoUrl
+                        });
+                      } else if (generatedVideoUrl) {
+                        navigator.clipboard.writeText(generatedVideoUrl);
+                        toast({
+                          title: "連結已複製",
+                          description: "影片連結已複製到剪貼簿",
+                        });
+                      }
+                    }}
+                  >
                     <Upload className="mr-2 h-4 w-4" />
                     分享
                   </Button>

@@ -29,7 +29,7 @@ export function Sidebar({ isCollapsed = false, onToggle }: SidebarProps) {
   return (
     <div className={cn(
       "hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:z-50 lg:bg-white lg:border-r lg:border-gray-200 transition-all duration-300",
-      isCollapsed ? "lg:w-16" : "lg:w-64"
+      isCollapsed ? "lg:w-16" : "lg:w-80"
     )}>
       {/* Logo 區域 */}
       <div className="flex h-16 shrink-0 items-center justify-between px-4 border-b border-gray-200">
@@ -64,22 +64,20 @@ export function Sidebar({ isCollapsed = false, onToggle }: SidebarProps) {
             const isActive = location === item.href;
             return (
               <li key={item.name}>
-                <Link href={item.href}>
-                  <a className={cn(
-                    "group flex gap-x-3 rounded-md p-3 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-blue-50 text-blue-700 border border-blue-200"
-                      : "text-gray-700 hover:text-blue-700 hover:bg-gray-50",
-                    isCollapsed && "justify-center"
-                  )}>
-                    <item.icon className={cn(
-                      "h-5 w-5 shrink-0",
-                      isActive ? "text-blue-700" : "text-gray-400 group-hover:text-blue-700"
-                    )} />
-                    {!isCollapsed && (
-                      <span className="truncate">{item.name}</span>
-                    )}
-                  </a>
+                <Link href={item.href} className={cn(
+                  "group flex gap-x-3 rounded-md p-3 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                    : "text-gray-700 hover:text-blue-700 hover:bg-gray-50",
+                  isCollapsed && "justify-center"
+                )}>
+                  <item.icon className={cn(
+                    "h-5 w-5 shrink-0",
+                    isActive ? "text-blue-700" : "text-gray-400 group-hover:text-blue-700"
+                  )} />
+                  {!isCollapsed && (
+                    <span className="truncate">{item.name}</span>
+                  )}
                 </Link>
               </li>
             );

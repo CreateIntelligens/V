@@ -103,7 +103,7 @@ export function BasicTTS() {
         };
       }
 
-      const response = await fetch("http://localhost:18200/api/tts/generate", {
+      const response = await fetch("/api/tts/generate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -115,8 +115,41 @@ export function BasicTTS() {
         throw new Error("TTS 生成失敗");
       }
 
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      // 檢查回應是否為音頻文件
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.startsWith("audio/")) {
+        // 獲取檔案名稱從回應頭
+        const filename = response.headers.get("X-Filename");
+        const audioPath = response.headers.get("X-Audio-Path");
+        
+        console.log('TTS 回應頭:', {
+          filename,
+          audioPath,
+          contentType,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+        
+        if (filename) {
+          // 直接使用服務器 URL 而不是 blob URL
+          const audioUrl = `http://localhost:8883/audios/${filename}`;
+          console.log('使用檔案名 URL:', audioUrl);
+          return audioUrl;
+        } else if (audioPath) {
+          // 使用音頻路徑
+          const audioUrl = audioPath.startsWith('http') ? audioPath : `http://localhost:8883${audioPath}`;
+          console.log('使用音頻路徑 URL:', audioUrl);
+          return audioUrl;
+        } else {
+          // 回退到 blob URL
+          console.log('回退到 blob URL');
+          const blob = await response.blob();
+          return URL.createObjectURL(blob);
+        }
+      } else {
+        // 如果不是音頻文件，可能是錯誤回應
+        const text = await response.text();
+        throw new Error(`TTS 生成失敗: ${text}`);
+      }
     },
     onSuccess: (audioUrl) => {
       setAudioUrl(audioUrl);

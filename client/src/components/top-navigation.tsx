@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Menu, Bell, Search, User } from "lucide-react";
+import { Menu, Bell, User } from "lucide-react";
 
 interface TopNavigationProps {
   onMenuClick?: () => void;
@@ -22,17 +22,8 @@ export function TopNavigation({ onMenuClick }: TopNavigationProps) {
       {/* 分隔線 */}
       <div className="h-6 w-px bg-gray-200 lg:hidden" />
 
-      {/* 搜尋框 */}
-      <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="relative flex flex-1 items-center">
-          <Search className="pointer-events-none absolute inset-y-0 left-0 h-full w-5 text-gray-400 pl-3" />
-          <input
-            className="block h-full w-full border-0 py-0 pl-10 pr-0 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm bg-transparent"
-            placeholder="搜尋..."
-            type="search"
-          />
-        </div>
-      </div>
+      {/* 空白區域取代搜尋框 */}
+      <div className="flex flex-1"></div>
 
       {/* 右側按鈕組 */}
       <div className="flex items-center gap-x-4 lg:gap-x-6">

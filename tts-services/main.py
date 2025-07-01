@@ -175,7 +175,7 @@ async def list_services():
 @app.post("/api/tts/generate")
 async def generate_tts(request: Request):
     """
-    TTS 語音合成統一入口
+    TTS 語音合成統一入口 - 統一輸出 WAV 格式
     根據 service 參數路由到對應的 TTS 服務
     """
     try:
@@ -212,7 +212,6 @@ async def generate_tts(request: Request):
         text = data.get("text")
         service = data.get("service", "service1")
         voice_config = data.get("voice_config") or {}
-        format_type = data.get("format", "wav")
         language = data.get("language", "zh")
         
         # 語言參數轉換 - ATEN 服務需要特定格式
@@ -234,11 +233,11 @@ async def generate_tts(request: Request):
         # 獲取對應的 TTS 服務
         tts_service = tts_services[service]
         
-        # 調用 TTS 服務生成音頻
+        # 統一使用 WAV 格式調用 TTS 服務
         result = await tts_service.generate_speech(
             text=text,
             voice_config=voice_config,
-            format=format_type,
+            format="wav",  # 統一使用 WAV 格式
             language=language
         )
         
@@ -249,7 +248,7 @@ async def generate_tts(request: Request):
             
             audio_data = result["audio_data"]
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"tts_{service}_{timestamp}_{uuid.uuid4().hex[:8]}.{format_type}"
+            filename = f"tts_{service}_{timestamp}_{uuid.uuid4().hex[:8]}.wav"
             
             # 確保音頻目錄存在
             audio_dir = "/app/data/audios"
@@ -260,18 +259,19 @@ async def generate_tts(request: Request):
             with open(audio_path, "wb") as f:
                 f.write(audio_data)
             
-            logger.info(f"✅ 音頻文件已保存: {audio_path}")
+            logger.info(f"✅ 音頻文件已保存: {audio_path} (格式: WAV)")
             
-            # 返回音頻數據
+            # 統一返回 WAV 格式
             return Response(
                 content=audio_data,
-                media_type=f"audio/{format_type}",
+                media_type="audio/wav",
                 headers={
                     "Content-Disposition": f"attachment; filename={filename}",
                     "X-Service": service,
                     "X-Duration": str(result.get("duration", 0)),
                     "X-Filename": filename,
-                    "X-Audio-Path": f"/data/audios/{filename}"
+                    "X-Audio-Path": f"/data/audios/{filename}",
+                    "X-Audio-Format": "WAV"
                 }
             )
         else:

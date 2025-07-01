@@ -27,8 +27,10 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     );
   }
 
-  // 確保使用完整的 URL
-  const fullAudioUrl = src.startsWith('http') ? src : `http://localhost:8883${src.startsWith('/') ? src : '/' + src}`;
+  // 確保使用完整的 URL - 修復相對路徑問題
+  const fullAudioUrl = src.startsWith('http') ? src : 
+    src.startsWith('blob:') ? src : 
+    `http://localhost:8883${src.startsWith('/') ? src : '/' + src}`;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -161,7 +163,6 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
         ref={audioRef} 
         src={fullAudioUrl} 
         preload="metadata"
-        crossOrigin="anonymous"
       />
     </div>
   );

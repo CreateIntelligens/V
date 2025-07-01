@@ -192,7 +192,7 @@ class TTSService2:
     async def _call_minimax_api(self, text: str, voice_id: str, speed: float, pitch: int, language: str, emotion: str, volume: float) -> bytes:
         """
         調用 MiniMax API v2 (t2a_v2)
-        使用真實的 API 格式
+        使用正確的 API 格式
         """
         try:
             headers = {
@@ -200,7 +200,7 @@ class TTSService2:
                 "Content-Type": "application/json"
             }
             
-            # 真實的 MiniMax API 格式
+            # 正確的 MiniMax API v2 格式
             data = {
                 "model": self.model,
                 "text": text,
@@ -212,7 +212,7 @@ class TTSService2:
                     "emotion": emotion
                 },
                 "audio_setting": {
-                    "sample_rate": 16000,  # MiniMax 使用 16000
+                    "sample_rate": 16000,
                     "bitrate": 128000,
                     "format": "wav",
                     "channel": 1
@@ -255,8 +255,13 @@ class TTSService2:
                             else:
                                 logger.error("❌ 回應中沒有音頻 URL")
                         else:
+                            error_code = json_data.get("base_resp", {}).get("status_code")
                             error_msg = json_data.get("base_resp", {}).get("status_msg", "未知錯誤")
-                            logger.error(f"❌ MiniMax API 錯誤: {error_msg}")
+                            logger.error(f"❌ MiniMax API 錯誤: {error_msg} (code: {error_code})")
+                            
+                            # 如果是 token 問題，拋出異常而不是回退到模擬模式
+                            if error_code == 1004:
+                                raise Exception(f"MiniMax API Token 無效: {error_msg}")
                         
                         # 如果沒有找到音頻，回退到模擬模式
                         logger.warning("⚠️ API 回應中未找到音頻數據，使用模擬模式")

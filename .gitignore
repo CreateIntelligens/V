@@ -11,7 +11,8 @@ out
 uploads
 .env
 .clinerules/
-
+.vscode
+.claude
 
 # 大型檔案和暫存目錄
 data/temp/

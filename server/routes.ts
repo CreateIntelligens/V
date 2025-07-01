@@ -216,7 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Model not found" });
       }
       
-      // 刪除模特記錄
+/*  */      // 刪除模特記錄
       const deleted = await storage.deleteModel(id);
       if (!deleted) {
         return res.status(404).json({ error: "Model not found" });
@@ -311,15 +311,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const content = await storage.createGeneratedContent(contentData);
       
-      // 根據提供商決定音頻格式
-      let audioFormat = "mp3";
-      let audioExtension = ".mp3";
-      
-      // ATEN 服務總是返回 WAV 格式
-      if (contentData.provider === "aten") {
-        audioFormat = "wav";
-        audioExtension = ".wav";
-      }
+      // 統一使用 WAV 格式
+      const audioFormat = "wav";
+      const audioExtension = ".wav";
       
       // 創建實際的音頻檔案
       const audioFileName = `audio_${content.id}${audioExtension}`;
@@ -408,19 +402,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error(`TTS 服務回應錯誤: ${ttsResponse.status}`);
           }
           
+          // 獲取 TTS 服務返回的實際文件名
+          const actualFilename = ttsResponse.headers.get('X-Filename');
           const audioBuffer = await ttsResponse.arrayBuffer();
           const audioData = Buffer.from(audioBuffer);
           
-          // 保存音頻檔案
-          await fs.writeFile(audioPath, audioData);
+          let finalAudioPath = audioPath;
+          let finalOutputPath = `/audios/${audioFileName}`;
+          
+          // 如果 TTS 服務提供了實際文件名，需要複製到統一命名的文件
+          if (actualFilename) {
+            const ttsServicePath = path.join(process.cwd(), 'data', 'audios', actualFilename);
+            
+            // 先保存 TTS 服務生成的文件
+            await fs.writeFile(ttsServicePath, audioData);
+            console.log(`🎯 TTS 服務文件已保存: ${ttsServicePath}`);
+            
+            // 複製到統一命名的文件供用戶訪問
+            await fs.copy(ttsServicePath, finalAudioPath);
+            console.log(`📋 已複製到統一文件名: ${ttsServicePath} -> ${finalAudioPath}`);
+            
+            // 可選：保留 TTS 服務原始文件名以便調試
+            // 或者清理原始文件以節省空間
+            // await fs.remove(ttsServicePath);
+          } else {
+            // 直接保存到統一命名的文件
+            await fs.writeFile(finalAudioPath, audioData);
+          }
           
           await storage.updateGeneratedContent(content.id, {
             status: "completed",
-            outputPath: `/audios/${audioFileName}`,
+            outputPath: finalOutputPath,
             duration: Math.floor(audioData.length / 16000) // 估算時長
           });
           
-          console.log(`✅ 音頻檔案已創建: ${audioPath} (${audioData.length} bytes)`);
+          console.log(`✅ 音頻檔案已創建: ${finalAudioPath} (${audioData.length} bytes)`);
         } catch (error) {
           console.error('調用 EdgeTTS 服務失敗:', error);
           
@@ -1009,6 +1025,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         console.log('無法獲取影片時長，使用預設值');
                       }
                       
+                      // 複製臨時音頻文件到最終位置供用戶下載
+                      try {
+                        const tempAudioPath = path.join(process.cwd(), 'data', 'audios', `temp_audio_${contentId}.wav`);
+                        const finalAudioPath = path.join(process.cwd(), 'data', 'audios', `audio_${contentId}.wav`);
+                        
+                        if (await fs.pathExists(tempAudioPath)) {
+                          await fs.copy(tempAudioPath, finalAudioPath);
+                          console.log(`🎵 已複製音頻文件: ${tempAudioPath} -> ${finalAudioPath}`);
+                          
+                          // 清理臨時音頻文件
+                          await fs.remove(tempAudioPath);
+                          console.log(`🧹 已清理臨時音頻文件: ${tempAudioPath}`);
+                        }
+                      } catch (audioCopyError) {
+                        console.error(`音頻文件複製失敗: ${audioCopyError}`);
+                      }
+
                       // 更新資料庫狀態為完成
                       try {
                         await storage.updateGeneratedContent(contentId, {
@@ -1232,6 +1265,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({
         success: false,
         message: "狀態查詢失敗",
+        error: error.message || "Internal server error"
+      });
+    }
+  });
+
+  // TTS 代理端點 - 統一格式處理
+  app.post("/api/tts/generate", async (req, res) => {
+    try {
+      console.log('🎤 收到 TTS 生成請求:', req.body);
+      
+      // 代理請求到 TTS 服務
+      const ttsResponse = await fetch('http://heygem-tts-services:8080/api/tts/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body)
+      });
+      
+      if (!ttsResponse.ok) {
+        const errorText = await ttsResponse.text();
+        console.error(`TTS 服務錯誤: ${ttsResponse.status} - ${errorText}`);
+        return res.status(ttsResponse.status).json({
+          success: false,
+          message: "TTS 生成失敗",
+          error: errorText
+        });
+      }
+      
+      // 檢查回應類型
+      const contentType = ttsResponse.headers.get('content-type');
+      
+      if (contentType && contentType.startsWith('audio/')) {
+        // 音頻回應 - 直接轉發
+        const audioBuffer = await ttsResponse.arrayBuffer();
+        const audioData = Buffer.from(audioBuffer);
+        
+        // 獲取檔案資訊
+        const filename = ttsResponse.headers.get('X-Filename') || `tts_${Date.now()}.wav`;
+        const service = ttsResponse.headers.get('X-Service') || 'unknown';
+        const duration = ttsResponse.headers.get('X-Duration') || '0';
+        const audioFormat = ttsResponse.headers.get('X-Audio-Format') || 'WAV';
+        const audioPath = ttsResponse.headers.get('X-Audio-Path');
+        
+        console.log(`✅ TTS 音頻生成成功: ${filename} (${audioData.length} bytes, ${audioFormat})`);
+        console.log(`📁 音頻路徑: ${audioPath}`);
+        
+        // 設置正確的 Content-Type 和檔案名稱回應頭
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+        res.setHeader('X-Filename', filename); // 重要：設置檔案名稱回應頭供前端使用
+        res.setHeader('X-Service', service);
+        res.setHeader('X-Duration', duration);
+        res.setHeader('X-Audio-Format', audioFormat);
+        
+        // 轉發音頻路徑 - 修正路徑格式
+        if (audioPath) {
+          // 將內部路徑轉換為可訪問的 URL 路徑
+          const publicPath = audioPath.replace('/app/data', '').replace('/data', '');
+          res.setHeader('X-Audio-Path', publicPath);
+          console.log(`🔗 設置音頻路徑: ${publicPath}`);
+        }
+        
+        // 設置 CORS 頭
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Expose-Headers', 'X-Filename,X-Service,X-Duration,X-Audio-Format,X-Audio-Path');
+        
+        res.send(audioData);
+      } else {
+        // JSON 回應 - 可能是錯誤
+        const jsonData = await ttsResponse.json();
+        res.json(jsonData);
+      }
+      
+    } catch (error) {
+      console.error('TTS 代理失敗:', error);
+      res.status(500).json({
+        success: false,
+        message: "TTS 服務不可用",
+        error: error.message || "Internal server error"
+      });
+    }
+  });
+
+  // TTS 服務資訊代理
+  app.get("/api/tts/services/:serviceId/info", async (req, res) => {
+    try {
+      const { serviceId } = req.params;
+      
+      const ttsResponse = await fetch(`http://heygem-tts-services:8080/api/tts/services/${serviceId}/info`);
+      
+      if (!ttsResponse.ok) {
+        return res.status(ttsResponse.status).json({
+          success: false,
+          message: "獲取服務資訊失敗"
+        });
+      }
+      
+      const serviceInfo = await ttsResponse.json();
+      res.json(serviceInfo);
+      
+    } catch (error) {
+      console.error('TTS 服務資訊代理失敗:', error);
+      res.status(500).json({
+        success: false,
+        message: "TTS 服務不可用",
         error: error.message || "Internal server error"
       });
     }
