@@ -5,11 +5,15 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"), // 密碼可選，允許為null
+  role: text("role").notNull().default("user"), // 'admin' or 'user'
+  note: text("note"), // 備註欄位（可選）
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const models = pgTable("models", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default("global"), // 用戶ID，默認為global
   name: text("name").notNull(),
   type: text("type").notNull(), // 'voice' or 'character'
   provider: text("provider").notNull().default("heygem"), // 'heygem', 'edgetts', 'minimax'
@@ -19,11 +23,13 @@ export const models = pgTable("models", {
   voiceSettings: text("voice_settings"), // JSON string for voice parameters
   characterSettings: text("character_settings"), // JSON string for character parameters
   trainingFiles: text("training_files").array(), // Array of file paths
+  isShared: boolean("is_shared").default(false), // 是否分享給所有人
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const generatedContent = pgTable("generated_content", {
   id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default("global"), // 用戶ID，默認為global
   modelId: text("model_id"), // 改為 text 類型以支援大數字
   type: text("type").notNull(), // 'audio' or 'video'
   inputText: text("input_text").notNull(),
@@ -42,6 +48,12 @@ export const generatedContent = pgTable("generated_content", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  role: true,
+  note: true,
+}).extend({
+  password: z.string().optional(), // 密碼可選
+  note: z.string().optional(), // 備註可選
+  role: z.enum(["admin", "user"]).default("user"), // 角色可選，默認為 user
 });
 
 export const insertModelSchema = createInsertSchema(models).omit({

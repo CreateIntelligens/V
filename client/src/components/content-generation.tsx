@@ -206,8 +206,8 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
     // 音頻生成的聲音來源驗證
     if (voiceSource === "model" && !selectedTTSModel) {
       toast({
-        title: "請選擇聲音模特",
-        description: "已選擇使用聲音模特，請選擇供應商和具體模型",
+        title: "請選擇音頻來源",
+        description: "已選擇使用用戶音頻，請選擇音頻檔案或上傳新檔案",
         variant: "destructive",
       });
       return;
@@ -263,7 +263,7 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
     if (!inputText || !selectedCharacterModelId) {
       toast({
         title: "請填寫完整信息",
-        description: "請輸入文本並選擇人物模特",
+        description: "請輸入文本並選擇人物形象",
         variant: "destructive",
       });
       return;
@@ -272,8 +272,8 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
     // 影片生成的聲音來源驗證
     if (voiceSource === "model" && !selectedTTSModel) {
       toast({
-        title: "請選擇聲音模特",
-        description: "已選擇使用聲音模特，請選擇供應商和具體模型",
+        title: "請選擇音頻來源",
+        description: "已選擇使用用戶音頻，請選擇音頻檔案或上傳新檔案",
         variant: "destructive",
       });
       return;
@@ -289,7 +289,7 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
     }
 
     generateVideoMutation.mutate({
-      modelId: parseInt(selectedCharacterModelId), // 使用人物模特ID
+      modelId: parseInt(selectedCharacterModelId), // 使用人物形象ID
       inputText,
       emotion,
       type: "video",
@@ -326,264 +326,63 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
                 />
               </div>
 
-              {/* 聲音來源選擇 */}
+              {/* 聲音模型選擇 - 照著 TTS 頁面的模板 */}
               <div>
-                <Label className="text-base font-semibold">聲音來源</Label>
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <Card
-                      className={`cursor-pointer transition-all ${voiceSource === "default"
-                          ? 'ring-2 ring-primary border-primary'
-                          : 'hover:shadow-md'
-                        }`}
-                      onClick={() => setVoiceSource("default")}
-                    >
-                      <CardContent className="p-4 text-center">
-                        <h4 className="font-medium text-gray-900 mb-1">快速生成</h4>
-                        <p className="text-xs text-gray-600">EdgeTTS 曉曉女聲</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card
-                      className={`cursor-pointer transition-all ${voiceSource === "model"
-                          ? 'ring-2 ring-primary border-primary'
-                          : 'hover:shadow-md'
-                        }`}
-                      onClick={() => setVoiceSource("model")}
-                    >
-                      <CardContent className="p-4 text-center">
-                        <h4 className="font-medium text-gray-900 mb-1">選擇聲音</h4>
-                        <p className="text-xs text-gray-600">多種聲音和模特</p>
-                      </CardContent>
-                    </Card>
-
-                    <Card
-                      className={`cursor-pointer transition-all ${voiceSource === "reference"
-                          ? 'ring-2 ring-primary border-primary'
-                          : 'hover:shadow-md'
-                        }`}
-                      onClick={() => setVoiceSource("reference")}
-                    >
-                      <CardContent className="p-4 text-center">
-                        <h4 className="font-medium text-gray-900 mb-1">聲音克隆</h4>
-                        <p className="text-xs text-gray-600">上傳參考音頻</p>
-                      </CardContent>
-                    </Card>
+                <Label className="text-base font-semibold">選擇聲音資源</Label>
+                <Select value={selectedTTSModel} onValueChange={(value) => {
+                  setSelectedTTSModel(value);
+                  // 自動設定聲音來源
+                  if (customVoiceModels.some(m => m.id.toString() === value)) {
+                    setVoiceSource("model");
+                    setSelectedProvider("uploaded");
+                  } else {
+                    setVoiceSource("default");
+                    setSelectedProvider("edgetts");
+                  }
+                }}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="選擇已訓練的聲音資源" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customVoiceModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id.toString()}>
+                        <div className="flex items-center space-x-2">
+                          <div>
+                            <div className="font-medium">{model.name}</div>
+                            <div className="text-sm text-gray-500">{model.description || '聲音資源'}</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    {customVoiceModels.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        尚無可用的聲音資源，請先到聲音管理頁面上傳
+                      </div>
+                    )}
+                  </SelectContent>
+                </Select>
+                
+                {customVoiceModels.length === 0 && (
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-yellow-700">
+                      <MicOff className="h-4 w-4" />
+                      <span className="text-sm font-medium">尚無可用的聲音資源</span>
+                    </div>
+                    <div className="text-xs text-yellow-600 mt-1">
+                      您需要先創建並訓練聲音資源才能使用此功能
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* 聲音模特選擇（當選擇聲音模特時顯示） */}
-              {voiceSource === "model" && (
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-base font-semibold">選擇TTS供應商</Label>
-                    <Select value={selectedProvider} onValueChange={(value) => {
-                      setSelectedProvider(value);
-                      setSelectedTTSModel("");
-                      setSelectedVoiceModelId("");
-                    }}>
-                      <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="選擇TTS供應商" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="edgetts">
-                          <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">免費</span>
-                            <span>EdgeTTS (微軟)</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="minimax">
-                          <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-700">付費</span>
-                            <span>MiniMax</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="openai">
-                          <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 rounded text-xs bg-teal-100 text-teal-700">付費</span>
-                            <span>OpenAI TTS</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="heygem">
-                          <div className="flex items-center space-x-2">
-                            <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">自訓練</span>
-                            <span>HeyGem 自訓練</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* 動態顯示對應供應商的模型選擇 */}
-                  {selectedProvider && (
-                    <div>
-                      <Label className="text-base font-semibold">
-                        選擇 {selectedProvider.toUpperCase()} 模型
-                      </Label>
-                      <Select value={selectedTTSModel} onValueChange={setSelectedTTSModel}>
-                        <SelectTrigger className="mt-2">
-                          <SelectValue placeholder={`選擇${selectedProvider}模型`} />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60">
-                          {selectedProvider === "edgetts" && (
-                            <>
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b">中文聲音</div>
-                              {defaultEdgeTTSOptions.filter(option => option.language.startsWith("zh")).map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
-                                      {option.gender === "female" ? "女聲" : "男聲"}
-                                    </span>
-                                    <span>{option.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-t">英文聲音</div>
-                              {defaultEdgeTTSOptions.filter(option => option.language.startsWith("en")).map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
-                                      {option.gender === "female" ? "女聲" : "男聲"}
-                                    </span>
-                                    <span>{option.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-t">日文聲音</div>
-                              {defaultEdgeTTSOptions.filter(option => option.language.startsWith("ja")).map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
-                                      {option.gender === "female" ? "女聲" : "男聲"}
-                                    </span>
-                                    <span>{option.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              {presetVoiceModels.filter(m => m.provider === "edgetts").length > 0 && (
-                                <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-t">自定義 EdgeTTS</div>
-                              )}
-                              {presetVoiceModels.filter(m => m.provider === "edgetts").map((model) => (
-                                <SelectItem key={model.id} value={model.id.toString()}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
-                                      自定義
-                                    </span>
-                                    <span>{model.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </>
-                          )}
-
-                          {selectedProvider === "minimax" && (
-                            <>
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b">預設聲音</div>
-                              {defaultMiniMaxOptions.map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-700">
-                                      預設
-                                    </span>
-                                    <span>{option.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              {presetVoiceModels.filter(m => m.provider === "minimax").length > 0 && (
-                                <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-t">自訓練聲音</div>
-                              )}
-                              {presetVoiceModels.filter(m => m.provider === "minimax").map((model) => (
-                                <SelectItem key={model.id} value={model.id.toString()}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-purple-100 text-purple-700">
-                                      自訓練
-                                    </span>
-                                    <span>{model.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </>
-                          )}
-
-                          {selectedProvider === "openai" && (
-                            <>
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b">OpenAI TTS 聲音</div>
-                              {defaultOpenAIOptions.map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-teal-100 text-teal-700">
-                                      OPENAI
-                                    </span>
-                                    <span>{option.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              <div className="px-3 py-2 text-xs text-gray-500 bg-gray-50">
-                                需要配置 OpenAI API Key
-                              </div>
-                            </>
-                          )}
-
-                          {selectedProvider === "heygem" && (
-                            <>
-                              <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b">自訓練模特</div>
-                              {customVoiceModels.map((model) => (
-                                <SelectItem key={model.id} value={model.id.toString()}>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">
-                                      HEYGEM
-                                    </span>
-                                    <span>{model.name}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                              {customVoiceModels.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500">
-                                  暫無自訓練模特，請先到模特管理頁面創建
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )}
 
 
-              {/* 參考音頻上傳（當選擇參考音頻時顯示） */}
-              {voiceSource === "reference" && (
-                <div>
-                  <Label className="text-base font-semibold">上傳參考音頻</Label>
-                  <div className="mt-3">
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      onChange={(e) => setReferenceAudio(e.target.files?.[0] || null)}
-                      className="block w-full text-sm text-gray-500
-                        file:mr-4 file:py-2 file:px-4
-                        file:rounded-full file:border-0
-                        file:text-sm file:font-semibold
-                        file:bg-primary file:text-primary-foreground
-                        hover:file:bg-primary/90"
-                    />
-                    {referenceAudio && (
-                      <p className="mt-2 text-sm text-gray-600">
-                        已選擇: {referenceAudio.name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 人物模特選擇 */}
+              {/* 人物形象選擇 */}
               <div>
-                <Label className="text-base font-semibold">人物模特 (影片生成必須)</Label>
+                <Label className="text-base font-semibold">人物形象 (影片生成必須)</Label>
                 <Select value={selectedCharacterModelId} onValueChange={setSelectedCharacterModelId}>
                   <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="選擇人物模特" />
+                    <SelectValue placeholder="選擇人物形象" />
                   </SelectTrigger>
                   <SelectContent>
                     {characterModels.map((model) => (
@@ -609,7 +408,7 @@ export function ContentGeneration({ models }: ContentGenerationProps) {
                     <p className="ml-4">- 快速生成：使用預設聲音</p>
                     <p className="ml-4">- 選擇聲音：多種平台和聲音選擇</p>
                     <p className="ml-4">- 聲音克隆：上傳參考音頻</p>
-                    <p>• <strong>影片生成</strong>：必須選擇人物模特 + 聲音來源</p>
+                    <p>• <strong>影片生成</strong>：必須選擇人物形象 + 聲音來源</p>
                   </div>
                   <div className="flex space-x-3">
                     <Button

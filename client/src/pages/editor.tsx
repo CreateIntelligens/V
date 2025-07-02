@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { AudioPlayer } from "@/components/audio-player";
 import { VideoModal } from "@/components/video-modal";
-import { MicOff, Video, Download, Star, Play, Settings, Zap, Expand } from "lucide-react";
+import { MicOff, Video, Download, Users, Play, Settings, Zap, Expand } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/contexts/user-context";
 import type { Model, InsertGeneratedContent } from "@shared/schema";
 import { VoiceSettings } from "@/components/tts/voice-settings";
 import { GenerationPanel } from "@/components/generation-panel";
@@ -23,7 +24,7 @@ export default function VideoEditor() {
   const [inputText, setInputText] = useState("");
   const [selectedCharacterModelId, setSelectedCharacterModelId] = useState<string>("");
   const [emotion, setEmotion] = useState("neutral");
-  const [voiceGenerationType, setVoiceGenerationType] = useState<"basic_tts" | "voice_model" | "voice_clone">("basic_tts");
+  const [voiceGenerationType, setVoiceGenerationType] = useState<"basic_tts" | "voice_model">("basic_tts");
   const [selectedTTSProvider, setSelectedTTSProvider] = useState("edgetts");
   const [selectedTTSModel, setSelectedTTSModel] = useState("zh-CN-XiaoxiaoNeural"); // 設置預設聲音
   const [referenceAudio, setReferenceAudio] = useState<File | null>(null);
@@ -50,23 +51,11 @@ export default function VideoEditor() {
   const [selectedVoiceModelId, setSelectedVoiceModelId] = useState<string>("");
   const [selectedGeneratedAudioId, setSelectedGeneratedAudioId] = useState<string>("");
 
-  // MiniMax 進階控制
-  const [minimaxEmotion, setMinimaxEmotion] = useState("neutral");
-  const [minimaxVolume, setMinimaxVolume] = useState([1.0]);
-  const [minimaxSpeed, setMinimaxSpeed] = useState([1.0]);
-  const [minimaxPitch, setMinimaxPitch] = useState([0]);
-  const [showMinimaxAdvanced, setShowMinimaxAdvanced] = useState(false);
-
-  // ATEN 進階控制
-  const [showATENAdvanced, setShowATENAdvanced] = useState(false);
-  const [atenPitch, setAtenPitch] = useState([0]);
-  const [atenRate, setAtenRate] = useState([1.0]);
-  const [atenVolume, setAtenVolume] = useState([0]);
-  const [atenSilenceScale, setAtenSilenceScale] = useState([1.0]);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   // 監聽頁面刷新時清除 sessionStorage（這樣刷新後會清除狀態）
   useEffect(() => {
@@ -84,17 +73,20 @@ export default function VideoEditor() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  // 收藏/取消收藏
-  const toggleFavoriteMutation = useMutation({
-    mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/content/${id}/favorite`, { isFavorite });
+  // 分享/取消分享
+  const toggleShareMutation = useMutation({
+    mutationFn: async ({ id, isShared }: { id: string; isShared: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/content/${id}/favorite`, { 
+        isFavorite: isShared, // 後端還是用 isFavorite 欄位，但語義是分享
+        userId: currentUser?.username
+      });
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
       toast({
-        title: data.message,
-        description: data.data.isFavorite ? "已加入收藏" : "已取消收藏",
+        title: "操作成功",
+        description: data.data.isFavorite ? "已分享給所有人" : "已取消分享",
       });
     },
     onError: () => {
@@ -107,15 +99,18 @@ export default function VideoEditor() {
   });
 
   const { data: modelsResponse } = useQuery({
-    queryKey: ["/api/models"],
+    queryKey: ["/api/models", currentUser?.username],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/models");
+      const params = new URLSearchParams();
+      if (currentUser?.username) params.append("userId", currentUser.username);
+      const response = await apiRequest("GET", `/api/models?${params.toString()}`);
       return response.json();
     },
   });
 
   const models = modelsResponse?.data?.list || [];
   const characterModels = models.filter((m: Model) => m.type === "character" && m.status === "ready");
+  const voiceModels = models.filter((m: Model) => m.type === "voice" && m.status === "ready");
 
   // 預設選擇第一個可用的角色模特
   useEffect(() => {
@@ -432,10 +427,10 @@ export default function VideoEditor() {
       return;
     }
 
-    if (voiceGenerationType === "voice_clone" && !referenceAudio) {
+    if (voiceGenerationType === "voice_model" && selectedTTSModel === "upload_new" && !referenceAudio) {
       toast({
         title: "請上傳參考音頻",
-        description: "參考音頻生成需要上傳音頻文件",
+        description: "上傳音頻需要上傳音頻文件",
         variant: "destructive",
       });
       return;
@@ -445,28 +440,19 @@ export default function VideoEditor() {
       inputText: voiceGenerationType === "basic_tts" ? inputText : "",
       emotion,
       type: "audio",
-      voiceSource: voiceGenerationType === "basic_tts" ? "model" : "reference",
+      voiceSource: voiceGenerationType === "basic_tts" ? "default" : (selectedTTSModel === "upload_new" ? "reference" : "model"),
       provider: selectedTTSProvider,
       ttsModel: selectedTTSModel,
       referenceAudio: referenceAudio,
-      // MiniMax 進階設定
-      minimaxEmotion,
-      minimaxVolume: minimaxVolume[0],
-      minimaxSpeed: minimaxSpeed[0],
-      minimaxPitch: minimaxPitch[0],
-      // ATEN 進階設定
-      atenPitch: atenPitch[0],
-      atenRate: atenRate[0],
-      atenVolume: atenVolume[0],
-      atenSilenceScale: atenSilenceScale[0],
+      userId: currentUser?.username, // 確保音頻歸屬於當前用戶
     });
   };
 
   const handleGenerateVideo = () => {
     if (!selectedCharacterModelId) {
       toast({
-        title: "請選擇人物模特",
-        description: "影片生成需要選擇人物模特",
+        title: "請選擇人物形象",
+        description: "影片生成需要選擇人物形象",
         variant: "destructive",
       });
       return;
@@ -481,10 +467,10 @@ export default function VideoEditor() {
       return;
     }
 
-    if (voiceGenerationType === "voice_clone" && !referenceAudio) {
+    if (voiceGenerationType === "voice_model" && selectedTTSModel === "upload_new" && !referenceAudio) {
       toast({
         title: "請上傳參考音頻",
-        description: "參考音頻生成需要上傳音頻文件",
+        description: "上傳音頻需要上傳音頻文件",
         variant: "destructive",
       });
       return;
@@ -495,19 +481,10 @@ export default function VideoEditor() {
       inputText: voiceGenerationType === "basic_tts" ? inputText : "",
       emotion,
       type: "video",
-      voiceSource: voiceGenerationType === "basic_tts" ? "model" : "reference",
+      voiceSource: voiceGenerationType === "basic_tts" ? "default" : (selectedTTSModel === "upload_new" ? "reference" : "model"),
       provider: selectedTTSProvider,
       ttsModel: selectedTTSModel,
-      // MiniMax 進階設定
-      minimaxEmotion,
-      minimaxVolume: minimaxVolume[0],
-      minimaxSpeed: minimaxSpeed[0],
-      minimaxPitch: minimaxPitch[0],
-      // ATEN 進階設定
-      atenPitch: atenPitch[0],
-      atenRate: atenRate[0],
-      atenVolume: atenVolume[0],
-      atenSilenceScale: atenSilenceScale[0],
+      userId: currentUser?.username, // 確保影片歸屬於當前用戶
     };
 
     // 如果有參考音頻，添加到數據中
@@ -551,27 +528,28 @@ export default function VideoEditor() {
                     setReferenceAudio={setReferenceAudio}
                     ttsProviders={ttsProviders}
                     ttsVoices={ttsVoices}
-                    minimaxEmotions={minimaxEmotions}
-                    showMinimaxAdvanced={showMinimaxAdvanced}
-                    setShowMinimaxAdvanced={setShowMinimaxAdvanced}
-                    minimaxEmotion={minimaxEmotion}
-                    setMinimaxEmotion={setMinimaxEmotion}
-                    minimaxVolume={minimaxVolume}
-                    setMinimaxVolume={setMinimaxVolume}
-                    minimaxSpeed={minimaxSpeed}
-                    setMinimaxSpeed={setMinimaxSpeed}
-                    minimaxPitch={minimaxPitch}
-                    setMinimaxPitch={setMinimaxPitch}
-                    showATENAdvanced={showATENAdvanced}
-                    setShowATENAdvanced={setShowATENAdvanced}
-                    atenPitch={atenPitch}
-                    setAtenPitch={setAtenPitch}
-                    atenRate={atenRate}
-                    setAtenRate={setAtenRate}
-                    atenVolume={atenVolume}
-                    setAtenVolume={setAtenVolume}
-                    atenSilenceScale={atenSilenceScale}
-                    setAtenSilenceScale={setAtenSilenceScale}
+                    minimaxEmotions={[]}
+                    voiceModels={voiceModels}
+                    showMinimaxAdvanced={false}
+                    setShowMinimaxAdvanced={() => {}}
+                    minimaxEmotion=""
+                    setMinimaxEmotion={() => {}}
+                    minimaxVolume={[1.0]}
+                    setMinimaxVolume={() => {}}
+                    minimaxSpeed={[1.0]}
+                    setMinimaxSpeed={() => {}}
+                    minimaxPitch={[0]}
+                    setMinimaxPitch={() => {}}
+                    showATENAdvanced={false}
+                    setShowATENAdvanced={() => {}}
+                    atenPitch={[0]}
+                    setAtenPitch={() => {}}
+                    atenRate={[1.0]}
+                    setAtenRate={() => {}}
+                    atenVolume={[0]}
+                    setAtenVolume={() => {}}
+                    atenSilenceScale={[1.0]}
+                    setAtenSilenceScale={() => {}}
                   />
                 </div>
 
@@ -604,10 +582,11 @@ export default function VideoEditor() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => toggleFavoriteMutation.mutate({ id: generatedAudioId, isFavorite: true })}
-                              className="text-gray-400 hover:text-yellow-500"
+                              onClick={() => toggleShareMutation.mutate({ id: generatedAudioId, isShared: true })}
+                              className="text-gray-400 hover:text-blue-500"
+                              title="分享給所有人"
                             >
-                              <Star className="h-4 w-4" />
+                              <Users className="h-4 w-4" />
                             </Button>
                           )}
                           <Button 
@@ -644,12 +623,12 @@ export default function VideoEditor() {
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 space-y-6">
-                  {/* 人物模特選擇 */}
+                  {/* 人物形象選擇 */}
                   <div>
-                    <Label className="text-base font-semibold">選擇人物模特</Label>
+                    <Label className="text-base font-semibold">選擇人物形象</Label>
                     <Select value={selectedCharacterModelId} onValueChange={setSelectedCharacterModelId}>
                       <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="選擇人物模特" />
+                        <SelectValue placeholder="選擇人物形象" />
                       </SelectTrigger>
                       <SelectContent>
                         {characterModels.map((model: Model) => (
@@ -679,27 +658,28 @@ export default function VideoEditor() {
                     setReferenceAudio={setReferenceAudio}
                     ttsProviders={ttsProviders}
                     ttsVoices={ttsVoices}
-                    minimaxEmotions={minimaxEmotions}
-                    showMinimaxAdvanced={showMinimaxAdvanced}
-                    setShowMinimaxAdvanced={setShowMinimaxAdvanced}
-                    minimaxEmotion={minimaxEmotion}
-                    setMinimaxEmotion={setMinimaxEmotion}
-                    minimaxVolume={minimaxVolume}
-                    setMinimaxVolume={setMinimaxVolume}
-                    minimaxSpeed={minimaxSpeed}
-                    setMinimaxSpeed={setMinimaxSpeed}
-                    minimaxPitch={minimaxPitch}
-                    setMinimaxPitch={setMinimaxPitch}
-                    showATENAdvanced={showATENAdvanced}
-                    setShowATENAdvanced={setShowATENAdvanced}
-                    atenPitch={atenPitch}
-                    setAtenPitch={setAtenPitch}
-                    atenRate={atenRate}
-                    setAtenRate={setAtenRate}
-                    atenVolume={atenVolume}
-                    setAtenVolume={setAtenVolume}
-                    atenSilenceScale={atenSilenceScale}
-                    setAtenSilenceScale={setAtenSilenceScale}
+                    minimaxEmotions={[]}
+                    voiceModels={voiceModels}
+                    showMinimaxAdvanced={false}
+                    setShowMinimaxAdvanced={() => {}}
+                    minimaxEmotion=""
+                    setMinimaxEmotion={() => {}}
+                    minimaxVolume={[1.0]}
+                    setMinimaxVolume={() => {}}
+                    minimaxSpeed={[1.0]}
+                    setMinimaxSpeed={() => {}}
+                    minimaxPitch={[0]}
+                    setMinimaxPitch={() => {}}
+                    showATENAdvanced={false}
+                    setShowATENAdvanced={() => {}}
+                    atenPitch={[0]}
+                    setAtenPitch={() => {}}
+                    atenRate={[1.0]}
+                    setAtenRate={() => {}}
+                    atenVolume={[0]}
+                    setAtenVolume={() => {}}
+                    atenSilenceScale={[1.0]}
+                    setAtenSilenceScale={() => {}}
                   />
                 </div>
 
@@ -758,10 +738,11 @@ export default function VideoEditor() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => toggleFavoriteMutation.mutate({ id: generatedVideoId, isFavorite: true })}
-                                className="text-gray-400 hover:text-yellow-500"
+                                onClick={() => toggleShareMutation.mutate({ id: generatedVideoId, isShared: true })}
+                                className="text-gray-400 hover:text-blue-500"
+                                title="分享給所有人"
                               >
-                                <Star className="h-4 w-4" />
+                                <Users className="h-4 w-4" />
                               </Button>
                             )}
                             <Button 
