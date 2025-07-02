@@ -4,17 +4,17 @@ import path from 'path';
 // 清理配置
 const CLEANUP_CONFIG = {
   ENABLE_CLEANUP: true,
-  // 未收藏內容的存活時間 (24小時 = 86400秒)
-  UNFAVORITED_TTL: 24 * 60 * 60, // 24小時
-  // 臨時 TTS 檔案的存活時間 (1小時)
-  TTS_FILE_TTL: 1 * 60 * 60, // 1小時
-  // temp 檔案的存活時間 (30分鐘)
-  TEMP_FILE_TTL: 30 * 60, // 30分鐘
-  // 清理間隔 (每30分鐘檢查一次，以毫秒為單位)
-  CLEANUP_INTERVAL: 30 * 60 * 1000, // 30分鐘
-  // 檔案數量限制
-  MAX_AUDIO_FILES: 20,
-  MAX_VIDEO_FILES: 20,
+  // 未收藏內容的存活時間 (7天 = 604800秒) - 給用戶充足時間決定是否收藏
+  UNFAVORITED_TTL: 7 * 24 * 60 * 60, // 7天
+  // 臨時 TTS 檔案的存活時間 (2小時) - 避免生成過程中被刪除
+  TTS_FILE_TTL: 2 * 60 * 60, // 2小時
+  // temp 檔案的存活時間 (1小時) - Face2Face處理需要較長時間
+  TEMP_FILE_TTL: 60 * 60, // 1小時
+  // 清理間隔 (每6小時檢查一次，減少系統負擔)
+  CLEANUP_INTERVAL: 6 * 60 * 60 * 1000, // 6小時
+  // 檔案數量限制 - 提高限制，減少誤刪
+  MAX_AUDIO_FILES: 100,
+  MAX_VIDEO_FILES: 50,
   // 啟動時清理
   CLEANUP_ON_STARTUP: true,
 };
@@ -364,9 +364,12 @@ const performCleanup = async () => {
 export const startCleanupService = () => {
   console.log('🚀 啟動自動清理服務...');
   console.log(`📋 清理配置:`, {
-    未收藏內容存活時間: `${CLEANUP_CONFIG.UNFAVORITED_TTL / 60} 分鐘`,
-    TTS檔案存活時間: `${CLEANUP_CONFIG.TTS_FILE_TTL / 60} 分鐘`,
-    清理間隔: CLEANUP_CONFIG.CLEANUP_INTERVAL,
+    未收藏內容存活時間: `${CLEANUP_CONFIG.UNFAVORITED_TTL / (24 * 60 * 60)} 天`,
+    TTS檔案存活時間: `${CLEANUP_CONFIG.TTS_FILE_TTL / (60 * 60)} 小時`,
+    Temp檔案存活時間: `${CLEANUP_CONFIG.TEMP_FILE_TTL / (60 * 60)} 小時`,
+    清理間隔: `${CLEANUP_CONFIG.CLEANUP_INTERVAL / (60 * 60 * 1000)} 小時`,
+    音頻檔案限制: `${CLEANUP_CONFIG.MAX_AUDIO_FILES} 個`,
+    影片檔案限制: `${CLEANUP_CONFIG.MAX_VIDEO_FILES} 個`,
     啟動時清理: CLEANUP_CONFIG.CLEANUP_ON_STARTUP
   });
 

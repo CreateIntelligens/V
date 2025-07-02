@@ -16,7 +16,7 @@ export default function VoiceModels() {
     },
   });
 
-  // 只顯示聲音模特
+  // 只顯示語音資源
   const voiceModels = (modelsResponse?.data?.list || []).filter((model: Model) => model.type === "voice");
 
   return (
@@ -29,8 +29,8 @@ export default function VoiceModels() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">聲音模特管理</h1>
-          <p className="text-gray-600">創建和管理您的AI聲音模特</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">語音資源管理</h1>
+          <p className="text-gray-600">創庺和管理您的AI語音資源</p>
         </div>
       </div>
 

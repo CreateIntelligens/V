@@ -4,13 +4,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { useUser } from "@/contexts/user-context";
 import type { Model, GeneratedContent } from "@shared/schema";
 
 export default function Home() {
+  const { currentUser } = useUser();
+  
   const { data: modelsResponse } = useQuery({
-    queryKey: ["/api/models"],
+    queryKey: ["/api/models", currentUser?.username],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/models");
+      const params = new URLSearchParams();
+      if (currentUser?.username) params.append("userId", currentUser.username);
+      const response = await apiRequest("GET", `/api/models?${params.toString()}`);
       return response.json();
     },
   });
@@ -18,9 +23,11 @@ export default function Home() {
   const models = modelsResponse?.data?.list || [];
 
   const { data: contentResponse } = useQuery({
-    queryKey: ["/api/content"],
+    queryKey: ["/api/content", currentUser?.username],
     queryFn: async () => {
-      const response = await apiRequest("GET", "/api/content");
+      const params = new URLSearchParams();
+      if (currentUser?.username) params.append("userId", currentUser.username);
+      const response = await apiRequest("GET", `/api/content?${params.toString()}`);
       return response.json();
     },
   });
@@ -46,12 +53,12 @@ export default function Home() {
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">AI Model Studio</h1>
           <p className="text-xl text-gray-600 mb-8">
-            專業的AI模特創建和內容生成平台，讓您輕鬆打造個性化的數字人物和聲音模型
+            專業的AI資源創建和內容生成平台，讓您輕鬆打造個性化的數字人物和聲音模型
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/models">
               <Button size="lg" className="px-8">
-                開始創建模特
+                開始創建資源
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
@@ -75,7 +82,7 @@ export default function Home() {
                   <Users className="text-blue-600 h-6 w-6" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">總模特數量</p>
+                  <p className="text-sm font-medium text-gray-600">總資源數量</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.totalModels}</p>
                 </div>
               </div>
@@ -103,7 +110,7 @@ export default function Home() {
                   <FileImage className="text-purple-600 h-6 w-6" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">聲音模特</p>
+                  <p className="text-sm font-medium text-gray-600">語音資源</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.voiceModels}</p>
                 </div>
               </div>
@@ -117,7 +124,7 @@ export default function Home() {
                   <TrendingUp className="text-orange-600 h-6 w-6" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">人物模特</p>
+                  <p className="text-sm font-medium text-gray-600">人物形象</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.characterModels}</p>
                 </div>
               </div>
@@ -136,8 +143,8 @@ export default function Home() {
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <Users className="text-blue-600 h-6 w-6" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">模特管理</h3>
-                <p className="text-sm text-gray-600">創建和管理您的AI模特</p>
+                <h3 className="font-semibold text-gray-900 mb-2">資源管理</h3>
+                <p className="text-sm text-gray-600">創建和管理您的AI資源</p>
               </CardContent>
             </Card>
           </Link>

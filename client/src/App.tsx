@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UserProvider, useUser } from "@/contexts/user-context";
 import { Sidebar } from "@/components/sidebar";
 import { TopNavigation } from "@/components/top-navigation";
 import { MobileSidebar } from "@/components/mobile-sidebar";
@@ -11,31 +12,28 @@ import Models from "@/pages/models";
 import Editor from "@/pages/editor";
 import Gallery from "@/pages/gallery";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
+import UserManagementPage from "@/pages/user-management";
 import { useState } from "react";
 
-function Router() {
+function MainApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* 桌面版側邊欄 */}
+    <div className="min-h-screen bg-gray-50 flex dark:bg-gray-900">
       <Sidebar 
         isCollapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
       
-      {/* 手機版側邊欄 */}
       <MobileSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} />
       
-      {/* 主要內容區域 */}
       <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${
         sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'
       }`}>
-        {/* 頂部導航 */}
         <TopNavigation onMenuClick={() => setSidebarOpen(true)} />
         
-        {/* 主要內容 */}
         <main className="flex-1 p-6 lg:p-8 overflow-auto">
           <div className="max-w-7xl mx-auto">
             <Switch>
@@ -52,13 +50,32 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const { currentUser } = useUser();
+
+  return (
+    <Switch>
+      {/* 帳號管理頁面完全開放，不需要登入 */}
+      <Route path="/user-management" component={UserManagementPage} />
+      <Route path="/login" component={LoginPage} />
+      
+      {/* 其他頁面需要登入 */}
+      <Route path="*">
+        {currentUser ? <MainApp /> : <LoginPage />}
+      </Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <UserProvider>
+        <TooltipProvider>
+          <Toaster />
+          <AppContent />
+        </TooltipProvider>
+      </UserProvider>
     </QueryClientProvider>
   );
 }

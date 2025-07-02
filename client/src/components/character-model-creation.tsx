@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { FileUpload } from "@/components/file-upload";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/contexts/user-context";
 import type { InsertModel } from "@shared/schema";
 
 export function CharacterModelCreation() {
@@ -19,6 +20,7 @@ export function CharacterModelCreation() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   const createModelMutation = useMutation({
     mutationFn: async (modelData: InsertModel & { actualFiles?: File[] }) => {
@@ -56,8 +58,8 @@ export function CharacterModelCreation() {
     },
     onSuccess: () => {
       toast({
-        title: "人物模特創建成功",
-        description: "您的AI人物模特已創建完成",
+        title: "人物形象創建成功",
+        description: "您的AI人物形象已創建完成",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/models"] });
       // Reset form
@@ -79,12 +81,13 @@ export function CharacterModelCreation() {
       type: "character" as const,
       provider: "heygem" as const,
       language: "zh-TW",
-      description: "人物模特",
+      description: "人物形象",
       status: "ready" as const,
       voiceSettings: null,
       characterSettings: null,
       trainingFiles: trainingFiles,
       actualFiles: actualFiles, // 使用保存的實際檔案
+      userId: currentUser?.username || "global", // 添加 userId
     };
 
     createModelMutation.mutate(modelData);
@@ -98,20 +101,20 @@ export function CharacterModelCreation() {
             <UserCircle className="text-green-600 h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">創建人物模特</h3>
+            <h3 className="text-lg font-semibold text-gray-900">創建人物形象</h3>
             <p className="text-sm text-gray-600">創建個性化的AI人物模型</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <h4 className="text-md font-medium text-gray-900 mb-4">模特配置</h4>
+            <h4 className="text-md font-medium text-gray-900 mb-4">資源配置</h4>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="characterName">模特名稱</Label>
+                <Label htmlFor="characterName">資源名稱</Label>
                 <Input
                   id="characterName"
-                  placeholder="輸入人物模特名稱"
+                  placeholder="輸入人物形象名稱"
                   value={characterModel.name}
                   onChange={(e) => setCharacterModel(prev => ({ ...prev, name: e.target.value }))}
                 />

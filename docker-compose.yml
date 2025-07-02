@@ -12,17 +12,18 @@ services:
     # 移除外部端口暴露，只通過 nginx 代理訪問
     expose:
       - "5000"
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=development
-      - PORT=5000
       - TTS_URL=http://tts-server:18180
       - MY_TTS_URL=http://heygem-tts-services:8080
       - ASR_URL=http://asr-server:10095
     volumes:
-      # 一次性掛載整個專案目錄
+      # 掛載整個專案目錄，但 node_modules 除外
       - .:/app
-      # 保留 node_modules volume 避免權限問題
-      - node_modules:/app/node_modules
+      # 使用匿名 volume 將容器內的 node_modules 與主機隔離
+      # 這可以確保使用在 Dockerfile 中安裝的、與容器環境相容的依賴
+      - /app/node_modules
     networks:
       - heygem_network
     depends_on:
@@ -128,6 +129,3 @@ services:
       - asr-server
       - heygem-gen-video
     restart: unless-stopped
-
-volumes:
-  node_modules:

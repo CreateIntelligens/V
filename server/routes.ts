@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertModelSchema, insertGeneratedContentSchema } from "@shared/schema";
+import { insertModelSchema, insertGeneratedContentSchema, insertUserSchema } from "@shared/schema";
 import { manualCleanup } from "./file-cleanup";
 import multer from "multer";
 import path from "path";
@@ -55,6 +55,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       message: "服務正常運行",
       timestamp: new Date().toISOString(),
       uptime: process.uptime()
+    });
+  });
+
+  // 測試端點 - 確認更新版本
+  app.get("/api/test-update", (req, res) => {
+    res.json({
+      success: true,
+      message: "聲音選擇界面已更新",
+      version: "2.0",
+      timestamp: new Date().toISOString(),
+      features: [
+        "統一聲音模型選擇下拉選單",
+        "EdgeTTS 內建聲音分組",
+        "自定義聲音模型分組",
+        "自動判斷聲音類型"
+      ]
     });
   });
 
@@ -148,10 +164,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }));
 
 
+  // User routes
+  app.get("/api/users", async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      // 移除密碼字段
+      const usersWithoutPasswords = users.map(({ password, ...rest }) => rest);
+      res.json({ success: true, data: usersWithoutPasswords });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ success: false, message });
+    }
+  });
+
+  app.post("/api/users", async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      if (!userData.username || !userData.password) {
+        return res.status(400).json({ success: false, message: 'Username and password are required' });
+      }
+      
+      // 檢查用戶是否已存在
+      const existingUser = await storage.getUserByUsername(userData.username);
+      if (existingUser) {
+        return res.status(409).json({ success: false, message: 'User already exists' });
+      }
+      
+      const newUser = await storage.createUser(userData);
+      const { password, ...userWithoutPassword } = newUser;
+      res.status(201).json({ success: true, data: userWithoutPassword });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "User creation failed";
+      res.status(400).json({ success: false, message });
+    }
+  });
+
+  app.post("/api/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username) {
+        return res.status(400).json({ success: false, message: 'Username is required' });
+      }
+      
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+
+      const isValid = await storage.validateUserPassword(username, password);
+      if (!isValid) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      }
+      
+      const { password: _, ...userWithoutPassword } = user;
+      res.json({ success: true, data: userWithoutPassword });
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred during login";
+      res.status(500).json({ success: false, message });
+    }
+  });
+
+  app.delete("/api/users/:username", async (req, res) => {
+    try {
+      const { username } = req.params;
+      const { password, adminUsername, adminPassword } = req.body;
+
+      if (username === "global") {
+        return res.status(400).json({ success: false, message: "Cannot delete global user" });
+      }
+      
+      // 禁止刪除 ai360 管理員帳號
+      const protectedAdminUsername = process.env.ADMIN_USERNAME || "ai360";
+      if (username === protectedAdminUsername) {
+        return res.status(400).json({ success: false, message: "Cannot delete admin account" });
+      }
+      
+      const userToDelete = await storage.getUserByUsername(username);
+      if (!userToDelete) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+      
+      // 檢查是否有管理員權限
+      let isAdminDelete = false;
+      if (adminUsername && adminPassword) {
+        const adminUser = await storage.getUserByUsername(adminUsername);
+        if (adminUser && adminUser.role === "admin") {
+          const isAdminValid = await storage.validateUserPassword(adminUsername, adminPassword);
+          if (isAdminValid) {
+            isAdminDelete = true;
+          }
+        }
+      }
+      
+      // 如果是管理員刪除，跳過密碼驗證
+      if (isAdminDelete) {
+        const deleted = await storage.deleteUser(username);
+        if (!deleted) {
+          return res.status(400).json({ success: false, message: "Failed to delete user" });
+        }
+        res.json({ success: true, message: "User deleted successfully by admin" });
+        return;
+      }
+      
+      // 普通用戶刪除，需要密碼驗證
+      if (userToDelete.password && !password) {
+        return res.status(400).json({ success: false, message: 'Password is required for deletion' });
+      }
+
+      const deleted = await storage.deleteUser(username, password);
+      if (!deleted) {
+        return res.status(400).json({ success: false, message: "Failed to delete user or incorrect password" });
+      }
+      
+      res.json({ success: true, message: "User deleted successfully" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete user";
+      res.status(500).json({ success: false, message });
+    }
+  });
+
   // Model routes
   app.get("/api/models", async (req, res) => {
     try {
-      const models = await storage.getModels();
+      const { userId } = req.query;
+      
+      // 獲取用戶角色
+      let userRole = "user"; // 默認為普通用戶
+      let actualUserId = userId as string;
+      
+      if (userId && userId !== "global" && userId !== "guest") {
+        const user = await storage.getUserByUsername(userId as string);
+        if (user) {
+          userRole = user.role;
+        }
+      } else if (userId === "guest") {
+        // 訪客用戶，傳 undefined 給 storage
+        actualUserId = undefined as any;
+      }
+      
+      const models = await storage.getModels(actualUserId, userRole);
       res.json({
         success: true,
         message: "獲取模特成功",
@@ -161,10 +313,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "獲取模特失敗",
-        error: "Failed to fetch models" 
+        error: message
       });
     }
   });
@@ -178,17 +331,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(model);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch model" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ error: message });
     }
   });
 
   app.post("/api/models", async (req, res) => {
     try {
-      const modelData = insertModelSchema.parse(req.body);
+      const modelData = insertModelSchema.parse({
+        ...req.body,
+        userId: req.body.userId || "global" // 確保有正確的 userId
+      });
       const model = await storage.createModel(modelData);
       res.status(201).json(model);
     } catch (error) {
-      res.status(400).json({ error: "Invalid model data" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(400).json({ error: message });
     }
   });
 
@@ -202,7 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(model);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update model" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ error: message });
     }
   });
 
@@ -216,7 +375,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Model not found" });
       }
       
-/*  */      // 刪除模特記錄
+      // 權限檢查
+      const { userId } = req.body; // 從請求體獲取當前用戶ID
+      
+      if (userId) {
+        // 登入用戶
+        const user = await storage.getUserByUsername(userId);
+        const userRole = user ? user.role : "user";
+        
+        if (userRole !== "admin") {
+          // 非管理員只能刪除自己的模型
+          if (model.userId !== userId) {
+            return res.status(403).json({ 
+              error: "Permission denied: You can only delete your own models" 
+            });
+          }
+        }
+        // 管理員可以刪除任何模型，不需要額外檢查
+      } else {
+        // 訪客用戶：只能刪除 global 模型
+        if (model.userId !== "global") {
+          return res.status(403).json({ 
+            error: "Permission denied: Guests can only delete global models" 
+          });
+        }
+      }
+      
+      // 刪除模特記錄
       const deleted = await storage.deleteModel(id);
       if (!deleted) {
         return res.status(404).json({ error: "Model not found" });
@@ -243,7 +428,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       console.error('刪除模特失敗:', error);
-      res.status(500).json({ error: "Failed to delete model" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // 模特分享/取消分享
+  app.patch("/api/models/:id/share", async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { isShared, userId } = req.body;
+      
+      // 先獲取模特資訊
+      const model = await storage.getModel(id);
+      if (!model) {
+        return res.status(404).json({ 
+          success: false,
+          message: "模特不存在",
+          error: "Model not found" 
+        });
+      }
+      
+      // 權限檢查：只有創建者和管理員可以切換分享狀態
+      if (userId) {
+        const user = await storage.getUserByUsername(userId);
+        const userRole = user ? user.role : "user";
+        
+        if (userRole !== "admin" && model.userId !== userId) {
+          return res.status(403).json({ 
+            success: false,
+            message: "權限不足：只能分享自己的模特",
+            error: "Permission denied: You can only share your own models" 
+          });
+        }
+      } else {
+        return res.status(401).json({ 
+          success: false,
+          message: "需要身份驗證",
+          error: "Authentication required" 
+        });
+      }
+      
+      const updated = await storage.updateModel(id, { isShared });
+      if (!updated) {
+        return res.status(404).json({ 
+          success: false,
+          message: "模特不存在",
+          error: "Model not found" 
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: isShared ? "已分享給所有人" : "已取消分享",
+        data: updated
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ 
+        success: false,
+        message: "操作失敗",
+        error: message 
+      });
     }
   });
 
@@ -264,24 +510,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ files });
     } catch (error) {
-      res.status(500).json({ error: "File upload failed" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ error: message });
     }
   });
 
   // Content generation routes
   app.get("/api/content", async (req, res) => {
     try {
-      const { type, favoriteOnly } = req.query;
-      let content = await storage.getGeneratedContent();
+      const { type, favoriteOnly, userId } = req.query;
+      
+      // 獲取用戶角色
+      let userRole = "user"; // 默認為普通用戶
+      if (userId && userId !== "global") {
+        const user = await storage.getUserByUsername(userId as string);
+        if (user) {
+          userRole = user.role;
+        }
+      }
+      
+      // 根據權限獲取內容
+      let content;
+      if (userRole === "admin") {
+        // 管理員可以看到所有內容
+        content = await storage.getGeneratedContent();
+      } else {
+        // 普通用戶和訪客只能看到自己的和global的內容
+        content = await storage.getGeneratedContent(userId as string);
+      }
       
       // 篩選類型
       if (type && type !== 'all') {
-        content = content.filter(c => c.type === type);
+        content = content.filter((c: any) => c.type === type);
       }
       
       // 篩選收藏
       if (favoriteOnly === 'true') {
-        content = content.filter(c => c.isFavorite === true);
+        content = content.filter((c: any) => c.isFavorite === true);
       }
       
       res.json({
@@ -293,10 +558,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "獲取內容失敗",
-        error: "Failed to fetch content" 
+        error: message
       });
     }
   });
@@ -306,7 +572,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contentData = insertGeneratedContentSchema.parse({
         ...req.body,
         type: "audio",
-        status: "generating"
+        status: "generating",
+        userId: req.body.userId || "global" // 確保有正確的 userId
       });
       
       const content = await storage.createGeneratedContent(contentData);
@@ -370,6 +637,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
               voiceConfig = {
                 voice: contentData.ttsModel || "default"
               };
+              break;
+              
+            case "custom":
+              // 使用自定義聲音模型
+              try {
+                const customVoiceModel = await storage.getModel(parseInt(contentData.ttsModel));
+                if (customVoiceModel && customVoiceModel.type === "voice") {
+                  serviceId = "service5"; // 自定義聲音服務
+                  voiceConfig = {
+                    modelId: customVoiceModel.id,
+                    modelName: customVoiceModel.name,
+                    trainingFiles: customVoiceModel.trainingFiles,
+                    voiceSettings: customVoiceModel.voiceSettings ? JSON.parse(customVoiceModel.voiceSettings) : {}
+                  };
+                } else {
+                  console.warn(`❌ 自定義聲音模型不存在或類型錯誤: ${contentData.ttsModel}`);
+                  // 回退到默認EdgeTTS
+                  serviceId = "service1";
+                  voiceConfig = {
+                    voice: "zh-CN-XiaoxiaoNeural",
+                    rate: "+0%",
+                    pitch: "+0Hz"
+                  };
+                }
+              } catch (error) {
+                console.error(`❌ 獲取自定義聲音模型失敗: ${error}`);
+                // 回退到默認EdgeTTS
+                serviceId = "service1";
+                voiceConfig = {
+                  voice: "zh-CN-XiaoxiaoNeural",
+                  rate: "+0%",
+                  pitch: "+0Hz"
+                };
+              }
               break;
               
             default:
@@ -479,19 +780,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).json({ 
         success: false,
         message: "語音生成失敗",
-        error: "Invalid content data" 
+        error: error instanceof Error ? error.message : "Invalid content data"
       });
     }
   });
 
-  app.post("/api/generate/video", upload.single('referenceAudio'), async (req: MulterRequest, res) => {
+  app.post("/api/generate/video", upload.single('referenceAudio'), async (req: Request, res) => {
     try {
       // 處理 FormData 或 JSON 資料
       let requestData = req.body;
+      const multerReq = req as MulterRequest;
       
       // 如果有上傳的檔案，加入到請求資料中
-      if (req.file) {
-        requestData.referenceAudio = req.file;
+      if (multerReq.file) {
+        requestData.referenceAudio = multerReq.file;
       }
       
       // 確保 modelId 存在
@@ -511,6 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         modelId: modelId,
         type: "video",
         status: "generating",
+        userId: requestData.userId || "global", // 確保有正確的 userId
         // 處理 MiniMax 參數
         minimaxVolume: requestData.minimaxVolume ? parseFloat(requestData.minimaxVolume) : undefined,
         minimaxSpeed: requestData.minimaxSpeed ? parseFloat(requestData.minimaxSpeed) : undefined,
@@ -540,7 +843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       setTimeout(async () => {
         try {
           console.log(`🎬 開始生成影片: ${contentData.inputText}`);
-          console.log(`👤 使用人物模特 ID: ${contentData.modelId}`);
+          console.log(`👤 使用人物形象 ID: ${contentData.modelId}`);
           console.log(`🔧 使用提供商: ${contentData.provider || 'edgetts'}`);
           
           // 先生成音頻
@@ -581,6 +884,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     volume: 0,
                     silence_scale: 1.0
                   };
+                  break;
+                  
+                case "custom":
+                  // 使用自定義聲音模型
+                  try {
+                    const customVoiceModel = await storage.getModel(parseInt(contentData.ttsModel));
+                    if (customVoiceModel && customVoiceModel.type === "voice") {
+                      serviceId = "service5"; // 自定義聲音服務
+                      voiceConfig = {
+                        modelId: customVoiceModel.id,
+                        modelName: customVoiceModel.name,
+                        trainingFiles: customVoiceModel.trainingFiles,
+                        voiceSettings: customVoiceModel.voiceSettings ? JSON.parse(customVoiceModel.voiceSettings) : {}
+                      };
+                    } else {
+                      console.warn(`❌ 自定義聲音模型不存在或類型錯誤: ${contentData.ttsModel}`);
+                      // 回退到默認EdgeTTS
+                      serviceId = "service1";
+                      voiceConfig = {
+                        voice: "zh-CN-XiaoxiaoNeural",
+                        rate: "+0%",
+                        pitch: "+0Hz"
+                      };
+                    }
+                  } catch (error) {
+                    console.error(`❌ 獲取自定義聲音模型失敗: ${error}`);
+                    // 回退到默認EdgeTTS
+                    serviceId = "service1";
+                    voiceConfig = {
+                      voice: "zh-CN-XiaoxiaoNeural",
+                      rate: "+0%",
+                      pitch: "+0Hz"
+                    };
+                  }
                   break;
                   
                 default:
@@ -624,15 +961,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
-          // 根據 modelId 獲取對應的人物模特影片
+          // 根據 modelId 獲取對應的人物形象影片
           let modelVideoFile = null;
           let modelVideoUrl = null;
           
           try {
+            if (!contentData.modelId) {
+              throw new Error("Model ID is missing");
+            }
             const model = await storage.getModel(contentData.modelId);
             if (model && model.trainingFiles && model.trainingFiles.length > 0) {
               // 使用模特的第一個訓練檔案作為影片來源
               const trainingFile = model.trainingFiles[0];
+              if (!trainingFile) {
+                throw new Error("Training file is missing in the model data.");
+              }
               
               // 檢查多個可能的位置
               const possiblePaths = [
@@ -645,7 +988,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // 4. 如果是已知的預設檔案，直接使用
                 trainingFile === '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4' ? 
                   path.join('D:', 'heygem_data', 'face2face', 'temp', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4') : null
-              ].filter(Boolean);
+              ].filter((p): p is string => !!p);
               
               // 檢查檔案是否存在
               for (const videoPath of possiblePaths) {
@@ -659,7 +1002,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     // 如果在專案目錄，使用 HTTP URL
                     modelVideoUrl = `http://heygem-web:5000/videos/${trainingFile}`;
                   }
-                  console.log(`✅ 找到人物模特影片: ${videoPath}`);
+                  console.log(`✅ 找到人物形象影片: ${videoPath}`);
                   break;
                 }
               }
@@ -670,17 +1013,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 if (await fs.pathExists(defaultVideoPath)) {
                   modelVideoFile = '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4';
                   modelVideoUrl = `file://${defaultVideoPath}`;
-                  console.log(`⚠️ 使用預設人物模特影片: ${defaultVideoPath}`);
+                  console.log(`⚠️ 使用預設人物形象影片: ${defaultVideoPath}`);
                 }
               }
             }
           } catch (error) {
-            console.error('獲取人物模特資訊失敗:', error);
+            console.error('獲取人物形象資訊失敗:', error);
           }
           
           // 如果沒有找到有效的模特影片，返回錯誤
           if (!modelVideoFile) {
-            throw new Error(`人物模特影片不存在。請確認檔案已上傳到正確位置：D:/heygem_data/face2face/temp/`);
+            throw new Error(`人物形象影片不存在。請確認檔案已上傳到正確位置：D:/heygem_data/face2face/temp/`);
           }
           
           // 調用 Face2Face 服務生成影片
@@ -767,10 +1110,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('影片生成請求失敗:', error);
+      const message = error instanceof Error ? error.message : "Invalid content data";
       res.status(400).json({ 
         success: false,
         message: "影片生成失敗",
-        error: "Invalid content data" 
+        error: message
       });
     }
   });
@@ -779,7 +1123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = req.params.id;
       const content = await storage.getGeneratedContent();
-      const item = content.find(c => c.id === id || c.id === parseInt(id));
+      const item = content.find((c: any) => c.id.toString() === id);
       if (!item) {
         return res.status(404).json({ 
           success: false,
@@ -793,10 +1137,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: item
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "獲取內容失敗",
-        error: "Failed to fetch content" 
+        error: message
       });
     }
   });
@@ -813,7 +1158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.everFavorited = true;
       }
       
-      const updated = await storage.updateGeneratedContent(id, updateData);
+      const updated = await storage.updateGeneratedContent(parseInt(id, 10), updateData);
       if (!updated) {
         return res.status(404).json({ 
           success: false,
@@ -828,10 +1173,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: updated
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "操作失敗",
-        error: "Failed to update favorite status" 
+        error: message
       });
     }
   });
@@ -843,13 +1189,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // 先獲取內容資訊，以便刪除對應的檔案
       const content = await storage.getGeneratedContent();
-      const item = content.find(c => c.id === id || c.id === parseInt(id));
+      const item = content.find((c: any) => c.id.toString() === id);
       
       if (!item) {
         return res.status(404).json({ 
           success: false,
           message: "內容不存在",
           error: "Content not found" 
+        });
+      }
+      
+      // 權限檢查
+      const { userId } = req.body; // 從請求體獲取當前用戶ID
+      if (userId) {
+        const user = await storage.getUserByUsername(userId);
+        const userRole = user ? user.role : "user";
+        
+        if (userRole !== "admin") {
+          // 非管理員只能刪除自己的內容
+          if (item.userId !== userId) {
+            return res.status(403).json({ 
+              success: false,
+              message: "權限不足：您只能刪除自己的內容",
+              error: "Permission denied: You can only delete your own content" 
+            });
+          }
+        }
+        // 管理員可以刪除任何內容，不需要額外檢查
+      } else {
+        // 如果沒有提供 userId，拒絕刪除
+        return res.status(401).json({ 
+          success: false,
+          message: "需要身份驗證",
+          error: "Authentication required" 
         });
       }
       
@@ -881,7 +1253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // 刪除資料庫記錄
-      const deleted = await storage.deleteGeneratedContent(id);
+      const deleted = await storage.deleteGeneratedContent(parseInt(id, 10));
       if (!deleted) {
         return res.status(404).json({ 
           success: false,
@@ -897,10 +1269,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('刪除內容失敗:', error);
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "刪除失敗",
-        error: "Failed to delete content" 
+        error: message
       });
     }
   });
@@ -915,7 +1288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (outputPath) updateData.outputPath = outputPath;
       if (duration !== undefined) updateData.duration = duration;
       
-      const updated = await storage.updateGeneratedContent(id, updateData);
+      const updated = await storage.updateGeneratedContent(parseInt(id, 10), updateData);
       if (!updated) {
         return res.status(404).json({ 
           success: false,
@@ -930,10 +1303,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: updated
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({ 
         success: false,
         message: "狀態更新失敗",
-        error: "Failed to update status" 
+        error: message
       });
     }
   });
@@ -1037,7 +1411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                   // 更新資料庫狀態為完成
                   try {
-                    await storage.updateGeneratedContent(contentId, {
+                    await storage.updateGeneratedContent(parseInt(contentId, 10), {
                       status: "completed",
                       outputPath: `/videos/${newVideoName}`,
                       duration: videoDuration
@@ -1087,7 +1461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // 檢查資料庫中的狀態
           try {
             const content = await storage.getGeneratedContent();
-            const item = content.find(c => c.id === contentId || c.id === parseInt(contentId));
+            const item = content.find((c: any) => c.id.toString() === contentId);
             
             if (item && item.status === "completed") {
               // 如果資料庫中已標記為完成，返回成功狀態
@@ -1111,10 +1485,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('影片進度查詢失敗:', error);
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({
         code: 10004,
         success: false,
-        msg: "查詢失敗",
+        msg: message,
         data: {}
       });
     }
@@ -1200,10 +1575,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('HeyGen 影片生成失敗:', error);
+      const message = error instanceof Error ? error.message : "Internal server error";
       res.status(500).json({
         success: false,
         message: "HeyGen 影片生成失敗",
-        error: error.message || "Internal server error"
+        error: message
       });
     }
   });
@@ -1254,10 +1630,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('HeyGen 狀態查詢失敗:', error);
+      const message = error instanceof Error ? error.message : "Internal server error";
       res.status(500).json({
         success: false,
         message: "狀態查詢失敗",
-        error: error.message || "Internal server error"
+        error: message
       });
     }
   });
@@ -1333,10 +1710,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('TTS 代理失敗:', error);
+      const message = error instanceof Error ? error.message : "Internal server error";
       res.status(500).json({
         success: false,
         message: "TTS 服務不可用",
-        error: error.message || "Internal server error"
+        error: message
       });
     }
   });
@@ -1360,10 +1738,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('TTS 服務資訊代理失敗:', error);
+      const message = error instanceof Error ? error.message : "Internal server error";
       res.status(500).json({
         success: false,
         message: "TTS 服務不可用",
-        error: error.message || "Internal server error"
+        error: message
       });
     }
   });
@@ -1380,10 +1759,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error('手動清理失敗:', error);
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
       res.status(500).json({
         success: false,
         message: "手動清理失敗",
-        error: "Manual cleanup failed"
+        error: message
       });
     }
   });
@@ -1391,7 +1771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Training simulation endpoint
   app.post("/api/models/:id/train", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = req.params.id;
       const model = await storage.getModel(id);
       if (!model) {
         return res.status(404).json({ error: "Model not found" });
@@ -1402,12 +1782,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Simulate training process
       setTimeout(async () => {
-        await storage.updateModel(id, { status: "ready" });
+        if (model) {
+          await storage.updateModel(model.id.toString(), { status: "ready" });
+        }
       }, 10000); // 10 seconds for demo
       
       res.json({ message: "Training started" });
     } catch (error) {
-      res.status(500).json({ error: "Failed to start training" });
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      res.status(500).json({ error: message });
     }
   });
 

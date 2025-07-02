@@ -3,19 +3,24 @@ import fs from "fs-extra";
 import path from "path";
 
 export interface IStorage {
+  // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(username: string, updates: Partial<User>): Promise<User | undefined>;
+  deleteUser(username: string, password?: string): Promise<boolean>;
+  validateUserPassword(username: string, password?: string): Promise<boolean>;
   
   // Model operations
-  getModels(): Promise<Model[]>;
+  getModels(userId?: string, userRole?: string): Promise<Model[]>;
   getModel(id: number | string): Promise<Model | undefined>;
   createModel(model: InsertModel): Promise<Model>;
   updateModel(id: number | string, updates: Partial<Model>): Promise<Model | undefined>;
   deleteModel(id: number | string): Promise<boolean>;
   
   // Generated content operations
-  getGeneratedContent(): Promise<GeneratedContent[]>;
+  getGeneratedContent(userId?: string): Promise<GeneratedContent[]>;
   getGeneratedContentByModel(modelId: number): Promise<GeneratedContent[]>;
   createGeneratedContent(content: InsertGeneratedContent): Promise<GeneratedContent>;
   updateGeneratedContent(id: number | string, updates: Partial<GeneratedContent>): Promise<GeneratedContent | undefined>;
@@ -47,6 +52,7 @@ export class MemStorage implements IStorage {
       // Voice Models - HeyGem
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "溫柔女聲",
         type: "voice",
         provider: "heygem",
@@ -60,6 +66,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "專業男聲",
         type: "voice",
         provider: "heygem",
@@ -74,6 +81,7 @@ export class MemStorage implements IStorage {
       // Voice Models - EdgeTTS (一些自定義設置的範例)
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "EdgeTTS 客製曉曉",
         type: "voice",
         provider: "edgetts",
@@ -87,6 +95,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "EdgeTTS 新聞播報",
         type: "voice",
         provider: "edgetts",
@@ -101,6 +110,7 @@ export class MemStorage implements IStorage {
       // Voice Models - MiniMax (both preset and trainable)
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "MiniMax 智能語音",
         type: "voice",
         provider: "minimax",
@@ -115,6 +125,7 @@ export class MemStorage implements IStorage {
       // Character Models - HeyGem only
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "活潑主播",
         type: "character",
         provider: "heygem",
@@ -128,6 +139,7 @@ export class MemStorage implements IStorage {
       },
       {
         id: this.currentModelId++,
+        userId: "global",
         name: "商務精英",
         type: "character",
         provider: "heygem",
@@ -156,13 +168,99 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
+    
+    // 使用 bcrypt 加密密碼
+    let hashedPassword = null;
+    if (insertUser.password) {
+      const bcrypt = await import('bcrypt');
+      hashedPassword = await bcrypt.hash(insertUser.password, 10);
+    }
+    
+    const user: User = { 
+      ...insertUser, 
+      id,
+      password: hashedPassword,
+      role: insertUser.role || "user",
+      createdAt: new Date()
+    };
     this.users.set(id, user);
     return user;
   }
 
-  async getModels(): Promise<Model[]> {
-    return Array.from(this.models.values()).sort((a, b) => 
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
+  async deleteUser(username: string, password?: string): Promise<boolean> {
+    // global 用戶不能刪除
+    if (username === "global") {
+      return false;
+    }
+
+    const user = await this.getUserByUsername(username);
+    if (!user) return false;
+
+    // 如果用戶設置了密碼，需要驗證密碼
+    if (user.password !== null && password) {
+      const bcrypt = await import('bcrypt');
+      const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) {
+        return false;
+      }
+    }
+
+    this.users.delete(user.id);
+    return true;
+  }
+
+  async validateUserPassword(username: string, password?: string): Promise<boolean> {
+    const user = await this.getUserByUsername(username);
+    if (!user) return false;
+
+    // 如果用戶沒有設置密碼，任何密碼都可以
+    if (user.password === null || user.password === undefined) {
+      return true;
+    }
+
+    // 如果用戶設置了密碼，使用 bcrypt 驗證
+    if (!password) return false;
+    const bcrypt = await import('bcrypt');
+    return bcrypt.compare(password, user.password);
+  }
+
+  async updateUser(username: string, updates: Partial<User>): Promise<User | undefined> {
+    const user = await this.getUserByUsername(username);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, ...updates };
+    this.users.set(user.id, updatedUser);
+    return updatedUser;
+  }
+
+  async getModels(userId?: string, userRole?: string): Promise<Model[]> {
+    let models = Array.from(this.models.values());
+    
+    if (userId) {
+      if (userRole === "admin") {
+        // 管理員可以看到所有模型
+        // models 保持不變，返回所有模型
+      } else {
+        // 普通用戶：看到自己的模型 + global 模型 + 分享的模型
+        models = models.filter(m => 
+          m.userId === userId || 
+          m.userId === "global" || 
+          m.isShared === true
+        );
+      }
+    } else {
+      // 訪客用戶：只能看到 global 模型和分享的模型
+      models = models.filter(m => 
+        m.userId === "global" || 
+        m.isShared === true
+      );
+    }
+    
+    return models.sort((a, b) => 
       new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
     );
   }
@@ -175,6 +273,7 @@ export class MemStorage implements IStorage {
     const id = this.currentModelId++;
     const model: Model = { 
       ...insertModel,
+      userId: insertModel.userId || "global", // 默認為 global
       description: insertModel.description || null,
       status: insertModel.status || "training",
       provider: insertModel.provider || "heygem",
@@ -201,8 +300,19 @@ export class MemStorage implements IStorage {
     return this.models.delete(id);
   }
 
-  async getGeneratedContent(): Promise<GeneratedContent[]> {
-    return Array.from(this.generatedContent.values()).sort((a, b) => 
+  async getGeneratedContent(userId?: string): Promise<GeneratedContent[]> {
+    let content = Array.from(this.generatedContent.values());
+    
+    if (userId) {
+      // 返回該用戶的內容 + global 內容 + 分享的內容（isFavorite=true）
+      content = content.filter(c => 
+        c.userId === userId || 
+        c.userId === "global" || 
+        c.isFavorite === true
+      );
+    }
+    
+    return content.sort((a, b) => 
       new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
     );
   }
@@ -217,6 +327,7 @@ export class MemStorage implements IStorage {
     const id = this.currentContentId++;
     const content: GeneratedContent = { 
       ...insertContent,
+      userId: insertContent.userId || "global", // 默認為 global
       status: insertContent.status || "generating",
       modelId: insertContent.modelId || null,
       outputPath: insertContent.outputPath || null,
@@ -224,6 +335,7 @@ export class MemStorage implements IStorage {
       duration: insertContent.duration || null,
       id,
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.generatedContent.set(id, content);
     return content;
@@ -249,23 +361,147 @@ export class MemStorage implements IStorage {
 export class JsonStorage implements IStorage {
   private modelsPath = path.join(process.cwd(), 'data', 'database', 'models.json');
   private videosPath = path.join(process.cwd(), 'data', 'database', 'videos.json');
+  private usersPath = path.join(process.cwd(), 'data', 'database', 'users.json');
 
   async getUser(id: number): Promise<User | undefined> {
-    return undefined; // 暫不實作
+    const users = await this.getUsers();
+    return users.find(u => u.id === id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return undefined; // 暫不實作
+    const users = await this.getUsers();
+    return users.find(u => u.username === username);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await this.getUsers();
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    throw new Error("Not implemented");
+    const users = await this.getUsers();
+    
+    // 使用 bcrypt 加密密碼
+    let hashedPassword = null;
+    if (insertUser.password) {
+      const bcrypt = await import('bcrypt');
+      hashedPassword = await bcrypt.hash(insertUser.password, 10);
+    }
+    
+    const newUser: User = {
+      ...insertUser,
+      id: Date.now(), // 使用時間戳作為 ID
+      password: hashedPassword,
+      role: insertUser.role || "user",
+      createdAt: new Date()
+    };
+    
+    users.push(newUser);
+    await fs.writeJson(this.usersPath, { users }, { spaces: 2 });
+    return newUser;
   }
 
-  async getModels(): Promise<Model[]> {
+  async deleteUser(username: string, password?: string): Promise<boolean> {
+    // global 用戶不能刪除
+    if (username === "global") {
+      return false;
+    }
+
+    const users = await this.getUsers();
+    const userIndex = users.findIndex(u => u.username === username);
+    if (userIndex === -1) return false;
+
+    const user = users[userIndex];
+    // 如果用戶設置了密碼，需要驗證密碼
+    if (user.password !== null && password) {
+      const bcrypt = await import('bcrypt');
+      const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) {
+        return false;
+      }
+    }
+
+    users.splice(userIndex, 1);
+    await fs.writeJson(this.usersPath, { users }, { spaces: 2 });
+    return true;
+  }
+
+  async validateUserPassword(username: string, password?: string): Promise<boolean> {
+    const user = await this.getUserByUsername(username);
+    if (!user) return false;
+
+    // 如果用戶沒有設置密碼，任何密碼都可以
+    if (user.password === null || user.password === undefined) {
+      return true;
+    }
+
+    // 如果用戶設置了密碼，使用 bcrypt 驗證
+    if (!password) return false;
+    const bcrypt = await import('bcrypt');
+    return bcrypt.compare(password, user.password);
+  }
+
+  async updateUser(username: string, updates: Partial<User>): Promise<User | undefined> {
+    const users = await this.getUsers();
+    const userIndex = users.findIndex(u => u.username === username);
+    if (userIndex === -1) return undefined;
+    
+    users[userIndex] = { ...users[userIndex], ...updates };
+    await fs.writeJson(this.usersPath, { users }, { spaces: 2 });
+    return users[userIndex];
+  }
+
+  private async getUsers(): Promise<User[]> {
+    try {
+      const data = await fs.readJson(this.usersPath);
+      const users = data.users || [];
+      
+      // 檢查並修復缺少 createdAt 的用戶
+      let needsUpdate = false;
+      users.forEach((user: User) => {
+        if (!user.createdAt) {
+          user.createdAt = new Date();
+          needsUpdate = true;
+        }
+      });
+      
+      // 如果有更新，寫回檔案
+      if (needsUpdate) {
+        await fs.writeJson(this.usersPath, { users }, { spaces: 2 });
+      }
+      
+      return users;
+    } catch (error) {
+      console.error('讀取用戶資料失敗:', error);
+      return [];
+    }
+  }
+
+  async getModels(userId?: string, userRole?: string): Promise<Model[]> {
     try {
       const data = await fs.readJson(this.modelsPath);
-      return data.models || [];
+      let models = data.models || [];
+      
+      if (userId) {
+        if (userRole === "admin") {
+          // 管理員可以看到所有模型
+          // models 保持不變，返回所有模型
+        } else {
+          // 普通用戶：看到自己的模型 + global 模型 + 分享的模型
+          models = models.filter((m: Model) => 
+            m.userId === userId || 
+            m.userId === "global" || 
+            m.isShared === true
+          );
+        }
+      } else {
+        // 訪客用戶：只能看到 global 模型和分享的模型
+        models = models.filter((m: Model) => 
+          m.userId === "global" || 
+          m.isShared === true
+        );
+      }
+      
+      return models;
     } catch (error) {
       console.error('讀取模特資料失敗:', error);
       return [];
@@ -281,9 +517,9 @@ export class JsonStorage implements IStorage {
     const models = await this.getModels();
     const newModel: Model = {
       ...insertModel,
+      userId: insertModel.userId || "global", // 默認為 global
       id: Date.now().toString(), // 使用時間戳作為 ID
       createdAt: new Date(),
-      updatedAt: new Date(),
     };
     
     models.push(newModel);
@@ -311,10 +547,21 @@ export class JsonStorage implements IStorage {
     return true;
   }
 
-  async getGeneratedContent(): Promise<GeneratedContent[]> {
+  async getGeneratedContent(userId?: string): Promise<GeneratedContent[]> {
     try {
       const data = await fs.readJson(this.videosPath);
-      return data.videos || [];
+      let content = data.videos || [];
+      
+      if (userId) {
+        // 返回該用戶的內容 + global 內容 + 分享的內容（isFavorite=true）
+        content = content.filter((c: GeneratedContent) => 
+          c.userId === userId || 
+          c.userId === "global" || 
+          c.isFavorite === true
+        );
+      }
+      
+      return content;
     } catch (error) {
       console.error('讀取影片資料失敗:', error);
       return [];
@@ -330,6 +577,7 @@ export class JsonStorage implements IStorage {
     const content = await this.getGeneratedContent();
     const newContent: GeneratedContent = {
       ...insertContent,
+      userId: insertContent.userId || "global", // 默認為 global
       id: Date.now().toString(),
       createdAt: new Date(),
       updatedAt: new Date(),

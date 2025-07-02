@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight, Play, Pause, Video, Expand } from "lucide-react";
+import { MicOff, UserCircle, Edit, Trash2, Plus, ArrowRight, Play, Pause, Video, Expand, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { VideoModal } from "@/components/video-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/contexts/user-context";
 import { useState, useRef } from "react";
 import type { Model } from "@shared/schema";
 
@@ -15,6 +16,7 @@ interface ModelGridProps {
 export function ModelGrid({ models }: ModelGridProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
   const [playingAudio, setPlayingAudio] = useState<number | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<{ src: string; title: string; id: string } | null>(null);
   const audioRefs = useRef<{ [key: number]: HTMLAudioElement }>({});
@@ -24,18 +26,51 @@ export function ModelGrid({ models }: ModelGridProps) {
 
   const deleteModelMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/models/${id}`);
+      const response = await apiRequest("DELETE", `/api/models/${id}`, {
+        userId: currentUser?.username
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "刪除失敗");
+      }
+      return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "模特已刪除",
-        description: "模特已成功刪除",
+        title: "資源已刪除",
+        description: "資源已成功刪除",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      // 修復查詢鍵，使用正確的格式
+      queryClient.invalidateQueries({ queryKey: ["/api/models", currentUser?.username || "guest"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "刪除失敗",
+        description: error.message || "請稍後重試",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // 分享/取消分享資源
+  const toggleShareMutation = useMutation({
+    mutationFn: async ({ id, isShared }: { id: string; isShared: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/models/${id}/share`, { 
+        isShared,
+        userId: currentUser?.username
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models", currentUser] });
+      toast({
+        title: "操作成功",
+        description: data.message,
+      });
     },
     onError: () => {
       toast({
-        title: "刪除失敗",
+        title: "操作失敗",
         description: "請稍後重試",
         variant: "destructive",
       });
@@ -43,9 +78,16 @@ export function ModelGrid({ models }: ModelGridProps) {
   });
 
   const handleDeleteModel = (id: number) => {
-    if (window.confirm("確定要刪除這個模特嗎？")) {
+    if (window.confirm("確定要刪除這個資源嗎？")) {
       deleteModelMutation.mutate(id);
     }
+  };
+
+  const handleToggleShare = (model: Model) => {
+    toggleShareMutation.mutate({
+      id: model.id.toString(),
+      isShared: !model.isShared
+    });
   };
 
   // 音頻播放控制
@@ -76,7 +118,7 @@ export function ModelGrid({ models }: ModelGridProps) {
 
   // 獲取影片預覽 - 直接使用影片檔案
   const getVideoPreview = (videoPath: string) => {
-    // 直接使用模特檔案路徑，不需要縮圖 API
+    // 直接使用資源檔案路徑，不需要縮圖 API
     return `/models/${videoPath}`;
   };
 
@@ -120,7 +162,7 @@ export function ModelGrid({ models }: ModelGridProps) {
   return (
     <section className="mb-8">
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">我的模特</h3>
+        <h3 className="text-lg font-semibold text-gray-900">我的資源</h3>
         <Button variant="ghost" className="text-primary hover:text-primary/80">
           查看全部 <ArrowRight className="ml-1 h-4 w-4" />
         </Button>
@@ -137,6 +179,19 @@ export function ModelGrid({ models }: ModelGridProps) {
                     <Icon className="text-white h-6 w-6" />
                   </div>
                   <div className="flex space-x-2">
+                    {/* 分享按鈕：ai360 可以分享任何作品，其他用戶只能分享自己的作品，訪客不能分享 */}
+                    {(currentUser?.username === "ai360" || 
+                      (currentUser?.username && model.userId === currentUser.username)) && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleToggleShare(model)}
+                        className={model.isShared ? "text-blue-500" : "text-gray-400"}
+                        title={model.isShared ? "取消分享" : "分享給所有人"}
+                      >
+                        <Users className={`h-4 w-4 ${model.isShared ? "fill-current" : ""}`} />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -151,7 +206,14 @@ export function ModelGrid({ models }: ModelGridProps) {
                     </Button>
                   </div>
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-2">{model.name}</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-gray-900">{model.name}</h4>
+                  <span className="text-xs text-gray-500">
+                    by {model.userId === 'global' ? '訪客' : 
+                        model.userId === currentUser?.username ? '我' : 
+                        model.userId}
+                  </span>
+                </div>
                 
                 {/* 聲音模型音頻預覽 */}
                 {model.type === "voice" && model.trainingFiles && model.trainingFiles.length > 0 && (
@@ -232,7 +294,7 @@ export function ModelGrid({ models }: ModelGridProps) {
                           e.stopPropagation();
                           setSelectedVideo({
                             src: getVideoPreview(model.trainingFiles[0]),
-                            title: `${model.name} - 人物模特預覽`,
+                            title: `${model.name} - 人物形象預覽`,
                             id: model.id.toString()
                           });
                         }}
@@ -269,8 +331,8 @@ export function ModelGrid({ models }: ModelGridProps) {
             <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center mb-4">
               <Plus className="text-gray-400 h-6 w-6" />
             </div>
-            <h4 className="font-medium text-gray-700 mb-2">創建新模特</h4>
-            <p className="text-sm text-gray-500">開始訓練您的專屬AI模特</p>
+            <h4 className="font-medium text-gray-700 mb-2">創建新資源</h4>
+            <p className="text-sm text-gray-500">開始訓練您的專屬AI資源</p>
           </CardContent>
         </Card>
       </div>

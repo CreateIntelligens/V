@@ -17,7 +17,7 @@ export function ModelTTS() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // 獲取聲音模特列表
+  // 獲取語音資源列表
   const { data: modelsResponse } = useQuery({
     queryKey: ["/api/models"],
     queryFn: async () => {
@@ -26,7 +26,7 @@ export function ModelTTS() {
     },
   });
 
-  // 過濾出已訓練完成的聲音模特
+  // 過濾出可用的語音資源
   const voiceModels = (modelsResponse?.data?.list || []).filter(
     (model: Model) => model.type === "voice" && model.status === "ready"
   );
@@ -50,13 +50,13 @@ export function ModelTTS() {
       setAudioUrl(audioUrl);
       toast({
         title: "語音生成成功",
-        description: "使用您的聲音模特生成語音完成",
+        description: "使用您的語音資源生成語音完成",
       });
     },
     onError: () => {
       toast({
         title: "生成失敗",
-        description: "請檢查模特狀態後重試",
+        description: "請檢查語音資源狀態後重試",
         variant: "destructive",
       });
     },
@@ -74,8 +74,8 @@ export function ModelTTS() {
 
     if (!selectedModelId) {
       toast({
-        title: "請選擇聲音模特",
-        description: "請先選擇一個已訓練的聲音模特",
+        title: "請選擇語音資源",
+        description: "請先選擇一個已訓練的語音資源",
         variant: "destructive",
       });
       return;
@@ -101,12 +101,12 @@ export function ModelTTS() {
       <Card>
         <CardContent className="p-8 text-center">
           <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">尚無可用的聲音模特</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">尚無可用的語音資源</h3>
           <p className="text-gray-600 mb-4">
-            您需要先創建並訓練聲音模特才能使用此功能
+            您需要先創建並訓練語音資源才能使用此功能
           </p>
           <Button variant="outline" onClick={() => window.location.href = "/voice-models"}>
-            前往創建聲音模特
+            前往創建語音資源
           </Button>
         </CardContent>
       </Card>
@@ -117,10 +117,10 @@ export function ModelTTS() {
     <div className="space-y-6">
       {/* 模特選擇 */}
       <div className="space-y-2">
-        <Label htmlFor="model">選擇聲音模特</Label>
+        <Label htmlFor="model">選擇語音資源</Label>
         <Select value={selectedModelId} onValueChange={setSelectedModelId}>
           <SelectTrigger>
-            <SelectValue placeholder="選擇已訓練的聲音模特" />
+            <SelectValue placeholder="選擇已訓練的語音資源" />
           </SelectTrigger>
           <SelectContent>
             {voiceModels.map((model: Model) => (
@@ -170,7 +170,7 @@ export function ModelTTS() {
         ) : (
           <>
             <Play className="mr-2 h-4 w-4" />
-            使用模特生成語音
+            使用語音資源生成語音
           </>
         )}
       </Button>

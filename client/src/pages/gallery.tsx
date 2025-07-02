@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Video, Music, Download, Share, Trash2, Search, Grid, List, Star, Expand } from "lucide-react";
+import { Video, Music, Download, Share, Trash2, Search, Grid, List, Star, Expand, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { AudioPlayer } from "@/components/audio-player";
 import { VideoModal } from "@/components/video-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/contexts/user-context";
 
 interface ContentItem {
   id: string;
@@ -22,6 +23,7 @@ interface ContentItem {
   status: "completed" | "generating" | "failed" | "processing";
   duration?: number | null;
   isFavorite?: boolean;
+  userId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,14 +38,16 @@ export default function Gallery() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   // 獲取內容列表
   const { data: contentResponse, isLoading, error } = useQuery({
-    queryKey: ["/api/content", filterType, showFavoritesOnly],
+    queryKey: ["/api/content", filterType, showFavoritesOnly, currentUser?.username],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filterType !== "all") params.append("type", filterType);
       if (showFavoritesOnly) params.append("favoriteOnly", "true");
+      if (currentUser?.username) params.append("userId", currentUser.username);
       
       console.log('API 請求:', `/api/content?${params.toString()}`);
       const response = await apiRequest("GET", `/api/content?${params.toString()}`);
@@ -55,17 +59,20 @@ export default function Gallery() {
 
   const content: ContentItem[] = contentResponse?.data?.list || [];
 
-  // 收藏/取消收藏
-  const toggleFavoriteMutation = useMutation({
-    mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/content/${id}/favorite`, { isFavorite });
+  // 分享/取消分享
+  const toggleShareMutation = useMutation({
+    mutationFn: async ({ id, isShared }: { id: string; isShared: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/content/${id}/favorite`, { 
+        isFavorite: isShared, // 後端還是用 isFavorite 欄位，但語義是分享
+        userId: currentUser?.username
+      });
       return response.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/content"] });
       toast({
-        title: data.message,
-        description: data.data.isFavorite ? "已加入收藏" : "已取消收藏",
+        title: "操作成功",
+        description: data.data.isFavorite ? "已分享給所有人" : "已取消分享",
       });
     },
     onError: () => {
@@ -80,7 +87,9 @@ export default function Gallery() {
   // 刪除內容
   const deleteContentMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest("DELETE", `/api/content/${id}`);
+      const response = await apiRequest("DELETE", `/api/content/${id}`, {
+        userId: currentUser?.username
+      });
       return response.json();
     },
     onSuccess: () => {
@@ -150,10 +159,10 @@ export default function Gallery() {
     }
   };
 
-  const handleToggleFavorite = (item: ContentItem) => {
-    toggleFavoriteMutation.mutate({
+  const handleToggleShare = (item: ContentItem) => {
+    toggleShareMutation.mutate({
       id: item.id,
-      isFavorite: !item.isFavorite
+      isShared: !item.isFavorite // isFavorite 欄位代表是否分享
     });
   };
 
@@ -214,7 +223,7 @@ export default function Gallery() {
       <Tabs value={showFavoritesOnly ? "favorites" : "all"} onValueChange={(value) => setShowFavoritesOnly(value === "favorites")}>
         <TabsList>
           <TabsTrigger value="all">全部作品</TabsTrigger>
-          <TabsTrigger value="favorites">收藏作品</TabsTrigger>
+          <TabsTrigger value="favorites">分享作品</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-6">
@@ -337,9 +346,16 @@ export default function Gallery() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">
-                          {item.type === 'audio' ? '音頻內容' : '影片內容'}
-                        </p>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-medium text-gray-900">
+                            {item.type === 'audio' ? '音頻內容' : '影片內容'}
+                          </p>
+                          <span className="text-sm text-gray-500">
+                            by {item.userId === 'global' ? '訪客' : 
+                                item.userId === currentUser?.username ? '我' : 
+                                item.userId}
+                          </span>
+                        </div>
                         <p className="text-sm text-gray-500">
                           {formatCreatedTime(item.createdAt)}
                         </p>
@@ -348,10 +364,11 @@ export default function Gallery() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleToggleFavorite(item)}
-                          className={item.isFavorite ? "text-yellow-500" : "text-gray-400"}
+                          onClick={() => handleToggleShare(item)}
+                          className={item.isFavorite ? "text-blue-500" : "text-gray-400"}
+                          title={item.isFavorite ? "取消分享" : "分享給所有人"}
                         >
-                          <Star className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
+                          <Users className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
                         </Button>
                         <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
                           {getStatusText(item.status)}
@@ -480,13 +497,19 @@ export default function Gallery() {
                           <h3 className="font-medium text-gray-900">
                             {item.type === 'audio' ? '音頻內容' : '影片內容'}
                           </h3>
+                          <span className="text-sm text-gray-500">
+                            by {item.userId === 'global' ? '訪客' : 
+                                item.userId === currentUser?.username ? '我' : 
+                                item.userId}
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleToggleFavorite(item)}
-                            className={item.isFavorite ? "text-yellow-500" : "text-gray-400"}
+                            onClick={() => handleToggleShare(item)}
+                            className={item.isFavorite ? "text-blue-500" : "text-gray-400"}
+                            title={item.isFavorite ? "取消分享" : "分享給所有人"}
                           >
-                            <Star className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
+                            <Users className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
                           </Button>
                           <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
                             {getStatusText(item.status)}
@@ -560,10 +583,10 @@ export default function Gallery() {
           ) : filteredContent.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Star className="text-gray-400 h-8 w-8" />
+                <Users className="text-gray-400 h-8 w-8" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">暫無收藏</h3>
-              <p className="text-gray-600">點擊星號收藏您喜歡的作品</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">暫無分享</h3>
+              <p className="text-gray-600">點擊分享按鈕與大家分享您的作品</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -581,20 +604,28 @@ export default function Gallery() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">
-                          {item.type === 'audio' ? '音頻內容' : '影片內容'}
-                        </p>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-medium text-gray-900">
+                            {item.type === 'audio' ? '音頻內容' : '影片內容'}
+                          </p>
+                          <span className="text-sm text-gray-500">
+                            by {item.userId === 'global' ? '訪客' : 
+                                item.userId === currentUser?.username ? '我' : 
+                                item.userId}
+                          </span>
+                        </div>
                         <p className="text-sm text-gray-500">
-                          {new Date(item.createdAt).toLocaleDateString()}
+                          {formatCreatedTime(item.createdAt)}
                         </p>
                       </div>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleToggleFavorite(item)}
-                        className="text-yellow-500"
+                        onClick={() => handleToggleShare(item)}
+                        className={item.isFavorite ? "text-blue-500" : "text-gray-400"}
+                        title={item.isFavorite ? "取消分享" : "分享給所有人"}
                       >
-                        <Star className="h-4 w-4 fill-current" />
+                        <Users className={`h-4 w-4 ${item.isFavorite ? "fill-current" : ""}`} />
                       </Button>
                     </div>
 

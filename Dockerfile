@@ -28,7 +28,7 @@ RUN chmod -R 755 uploads data
 # 暴露端口
 EXPOSE 5000
 
-# 設置環境變量
+# 設置環境變數
 ENV NODE_ENV=development
 ENV PORT=5000
 ENV TTS_URL=http://tts-server:18180

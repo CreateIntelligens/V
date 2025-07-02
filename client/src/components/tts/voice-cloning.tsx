@@ -14,6 +14,15 @@ export function VoiceCloning() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // 禁用功能提示
+  const showDisabledMessage = () => {
+    toast({
+      title: "功能暫未開放",
+      description: "聲音克隆功能正在開發中，敬請期待",
+      variant: "default",
+    });
+  };
+
   const generateCloningMutation = useMutation({
     mutationFn: async ({ text, referenceAudio }: { text: string; referenceAudio: string[] }) => {
       const formData = new FormData();
@@ -87,17 +96,30 @@ export function VoiceCloning() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* 參考音頻上傳 */}
-      <div className="space-y-2">
-        <Label>上傳參考音頻</Label>
-        <FileUpload
-          accept=".mp3,.wav,.flac,.m4a"
-          multiple={false}
-          onFilesChange={setReferenceAudio}
-          description="支持 MP3, WAV, FLAC, M4A 格式，建議 10-60 秒清晰語音"
-        />
-        {referenceAudio.length > 0 && (
+    <div className="space-y-6 relative">
+      {/* 禁用遮罩 */}
+      <div className="absolute inset-0 bg-gray-50 bg-opacity-75 z-10 flex items-center justify-center rounded-lg">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">功能開發中</h3>
+            <p className="text-gray-600 mb-4">聲音克隆功能正在開發中，敬請期待！</p>
+            <p className="text-sm text-gray-500">目前您可以使用「用戶音頻」功能上傳音頻檔案進行影片生成</p>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* 原有內容（禁用狀態） */}
+      <div className="space-y-6 opacity-50 pointer-events-none">
+        {/* 參考音頻上傳 */}
+        <div className="space-y-2">
+          <Label>上傳參考音頻</Label>
+          <FileUpload
+            accept=".mp3,.wav,.flac,.m4a"
+            multiple={false}
+            onFilesChange={setReferenceAudio}
+            description="支持 MP3, WAV, FLAC, M4A 格式，建議 10-60 秒清晰語音"
+          />
+          {referenceAudio.length > 0 && (
           <div className="text-sm text-green-600">
             ✓ 已上傳參考音頻檔案
           </div>
@@ -172,6 +194,7 @@ export function VoiceCloning() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }

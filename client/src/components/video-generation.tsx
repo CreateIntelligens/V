@@ -35,6 +35,7 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
   const [selectedModel, setSelectedModel] = useState<string>("1751016573603");
   const [selectedProvider, setSelectedProvider] = useState<string>("edgetts");
   const [selectedVoice, setSelectedVoice] = useState<string>("zh-CN-XiaoxiaoNeural");
+  const [voiceType, setVoiceType] = useState<string>("edgetts"); // "edgetts" or "custom"
   const [textInput, setTextInput] = useState("");
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string>("");
@@ -47,11 +48,21 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     select: (data: any) => data?.data?.list || [],
   });
 
+  // 獲取自定義聲音模型
+  const { data: voiceModelsData } = useQuery({
+    queryKey: ["/api/models", "voice"],
+    select: (data: any) => {
+      const allModels = data?.data?.list || [];
+      return allModels.filter((model: any) => model.type === "voice");
+    },
+  });
+
   // 載入保存的選擇
   useEffect(() => {
     const savedModel = localStorage.getItem('selectedVideoModel');
     const savedProvider = localStorage.getItem('selectedVideoProvider');
     const savedVoice = localStorage.getItem('selectedVideoVoice');
+    const savedVoiceType = localStorage.getItem('selectedVideoVoiceType');
     
     if (savedModel) {
       setSelectedModel(savedModel);
@@ -59,8 +70,11 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     if (savedProvider && TTS_PROVIDERS.find(p => p.id === savedProvider)) {
       setSelectedProvider(savedProvider);
     }
-    if (savedVoice && EDGETTS_VOICES.find(v => v.id === savedVoice)) {
+    if (savedVoice) {
       setSelectedVoice(savedVoice);
+    }
+    if (savedVoiceType && ["edgetts", "custom"].includes(savedVoiceType)) {
+      setVoiceType(savedVoiceType);
     }
   }, []);
 
@@ -83,15 +97,22 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     }
   }, [selectedVoice]);
 
+  useEffect(() => {
+    if (voiceType) {
+      localStorage.setItem('selectedVideoVoiceType', voiceType);
+    }
+  }, [voiceType]);
+
 
   // 本地影片生成
   const generateVideoMutation = useMutation({
-    mutationFn: async (data: { text: string; modelId: string; provider: string; ttsModel: string }) => {
+    mutationFn: async (data: { text: string; modelId: string; provider: string; ttsModel: string; voiceType: string }) => {
       const response = await apiRequest("POST", "/api/generate/video", {
         inputText: data.text,
         modelId: data.modelId,
         provider: data.provider,
         ttsModel: data.ttsModel,
+        voiceType: data.voiceType,
       });
       return response.json();
     },
@@ -191,14 +212,31 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     generateVideoMutation.mutate({
       text: textInput,
       modelId: selectedModel,
-      provider: selectedProvider,
+      provider: voiceType === "custom" ? "custom" : selectedProvider,
       ttsModel: selectedVoice,
+      voiceType: voiceType,
     });
   };
 
   const selectedModelData = modelsData?.find((m: any) => m.id.toString() === selectedModel);
   const selectedProviderData = TTS_PROVIDERS.find(p => p.id === selectedProvider);
-  const selectedVoiceData = EDGETTS_VOICES.find(v => v.id === selectedVoice);
+  
+  // 自動判斷聲音模型類型並獲取對應資料
+  const selectedVoiceData = (() => {
+    // 先在 EdgeTTS 中查找
+    const edgeTTSVoice = EDGETTS_VOICES.find(v => v.id === selectedVoice);
+    if (edgeTTSVoice) {
+      return edgeTTSVoice;
+    }
+    
+    // 再在自定義聲音中查找
+    const customVoice = voiceModelsData?.find(v => v.id.toString() === selectedVoice);
+    if (customVoice) {
+      return customVoice;
+    }
+    
+    return null;
+  })();
 
   return (
     <div className="space-y-6">
@@ -232,7 +270,7 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
                       </div>
                       <div>
                         <div className="font-medium">{model.name}</div>
-                        <div className="text-sm text-gray-500">{model.description || '人物模特'}</div>
+                        <div className="text-sm text-gray-500">{model.description || '人物形象'}</div>
                       </div>
                     </div>
                   </SelectItem>
@@ -246,50 +284,34 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
             )}
           </div>
 
-          {/* TTS 提供商選擇 */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold flex items-center gap-2">
-              <Mic className="h-4 w-4 text-green-600" />
-              選擇 TTS 提供商
-            </Label>
-            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-              <SelectTrigger>
-                <SelectValue placeholder="選擇提供商" />
-              </SelectTrigger>
-              <SelectContent>
-                {TTS_PROVIDERS.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                        <Mic className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div>
-                        <div className="font-medium">{provider.name}</div>
-                        <div className="text-sm text-gray-500">{provider.description}</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedProviderData && (
-              <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-700">
-                {selectedProviderData.name}
-              </div>
-            )}
-          </div>
-
-          {/* 聲音選擇 */}
+          {/* 聲音模型選擇 */}
           <div className="space-y-3">
             <Label className="text-base font-semibold flex items-center gap-2">
               <Play className="h-4 w-4 text-purple-600" />
-              選擇聲音
+              選擇聲音模型
             </Label>
-            <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+            <Select value={selectedVoice} onValueChange={(value) => {
+              setSelectedVoice(value);
+              // 自動判斷是 EdgeTTS 或自定義聲音
+              const isEdgeTTS = EDGETTS_VOICES.some(v => v.id === value);
+              const isCustom = voiceModelsData?.some((v: any) => v.id.toString() === value);
+              
+              if (isEdgeTTS) {
+                setVoiceType("edgetts");
+                setSelectedProvider("edgetts");
+              } else if (isCustom) {
+                setVoiceType("custom");
+                setSelectedProvider("custom");
+              }
+            }}>
               <SelectTrigger>
-                <SelectValue placeholder="選擇聲音" />
+                <SelectValue placeholder="選擇聲音模型" />
               </SelectTrigger>
               <SelectContent>
+                {/* EdgeTTS 聲音 */}
+                <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                  EdgeTTS 內建聲音
+                </div>
                 {EDGETTS_VOICES.map((voice) => (
                   <SelectItem key={voice.id} value={voice.id}>
                     <div className="flex items-center gap-2">
@@ -303,11 +325,68 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
                     </div>
                   </SelectItem>
                 ))}
+                
+                {/* 自定義聲音 */}
+                {voiceModelsData && voiceModelsData.length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-50 border-t">
+                      我的聲音模型
+                    </div>
+                    {voiceModelsData.map((voice: any) => (
+                      <SelectItem key={voice.id} value={voice.id.toString()}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Mic className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{voice.name}</div>
+                            <div className="text-sm text-gray-500">自定義聲音</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
+            
+            {/* 顯示目前選擇的聲音資訊 */}
             {selectedVoiceData && (
-              <div className="p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-700">
-                {selectedVoiceData.name}
+              <div className={`p-3 border rounded-lg ${
+                voiceType === "edgetts" 
+                  ? "bg-purple-50 border-purple-200"
+                  : "bg-blue-50 border-blue-200"
+              }`}>
+                <div className="flex items-center gap-2">
+                  {voiceType === "edgetts" ? (
+                    <Play className="h-4 w-4 text-purple-600" />
+                  ) : (
+                    <Mic className="h-4 w-4 text-blue-600" />
+                  )}
+                  <span className={`text-sm font-medium ${
+                    voiceType === "edgetts" ? "text-purple-700" : "text-blue-700"
+                  }`}>
+                    {selectedVoiceData.name}
+                  </span>
+                </div>
+                <div className={`text-xs mt-1 ${
+                  voiceType === "edgetts" ? "text-purple-600" : "text-blue-600"
+                }`}>
+                  {voiceType === "edgetts" ? '內建 EdgeTTS 聲音' : '自定義聲音模型'}
+                </div>
+              </div>
+            )}
+            
+            {/* 提示上傳聲音模型 */}
+            {(!voiceModelsData || voiceModelsData.length === 0) && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center gap-2 text-yellow-700">
+                  <Upload className="h-4 w-4" />
+                  <span className="text-sm font-medium">沒有自定義聲音模型</span>
+                </div>
+                <div className="text-xs text-yellow-600 mt-1">
+                  您可以到「聲音管理」頁面上傳聲音檔案來創建自定義聲音模型
+                </div>
               </div>
             )}
           </div>

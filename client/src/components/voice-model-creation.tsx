@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { FileUpload } from "@/components/file-upload";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/contexts/user-context";
 import type { InsertModel } from "@shared/schema";
 
 export function VoiceModelCreation() {
@@ -21,6 +22,7 @@ export function VoiceModelCreation() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   const createModelMutation = useMutation({
     mutationFn: async (modelData: InsertModel) => {
@@ -29,8 +31,8 @@ export function VoiceModelCreation() {
     },
     onSuccess: () => {
       toast({
-        title: "聲音模特創建成功",
-        description: "您的AI聲音模特已開始訓練",
+        title: "參考音頻上傳成功",
+        description: "參考音頻已上傳完成",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/models"] });
       // Reset form
@@ -39,8 +41,8 @@ export function VoiceModelCreation() {
     },
     onError: () => {
       toast({
-        title: "創建失敗",
-        description: "請檢查輸入信息後重試",
+        title: "上傳失敗",
+        description: "請檢查檔案格式後重試",
         variant: "destructive",
       });
     },
@@ -52,14 +54,15 @@ export function VoiceModelCreation() {
       type: "voice",
       provider: "heygem",
       language: "zh-TW",
-      description: "聲音模特",
-      status: "training",
+      description: "語音資源",
+      status: "ready",
       voiceSettings: JSON.stringify({
         pitch: audioModel.pitch,
         speed: audioModel.speed,
       }),
       characterSettings: null,
       trainingFiles: trainingFiles,
+      userId: currentUser?.username || "global", // 添加 userId
     };
 
     createModelMutation.mutate(modelData);
@@ -73,20 +76,20 @@ export function VoiceModelCreation() {
             <MicOff className="text-blue-600 h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">創建聲音模特</h3>
-            <p className="text-sm text-gray-600">創建具有獨特聲音特徵的AI語音模型</p>
+            <h3 className="text-lg font-semibold text-gray-900">上傳參考音頻</h3>
+            <p className="text-sm text-gray-600">上傳您的參考音頻，用於影片生成</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <h4 className="text-md font-medium text-gray-900 mb-4">模特配置</h4>
+            <h4 className="text-md font-medium text-gray-900 mb-4">資源配置</h4>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="audioName">模特名稱</Label>
+                <Label htmlFor="audioName">資源名稱</Label>
                 <Input
                   id="audioName"
-                  placeholder="輸入聲音模特名稱"
+                  placeholder="輸入語音資源名稱"
                   value={audioModel.name}
                   onChange={(e) => setAudioModel(prev => ({ ...prev, name: e.target.value }))}
                 />
@@ -95,7 +98,7 @@ export function VoiceModelCreation() {
           </div>
 
           <div>
-            <h4 className="text-md font-medium text-gray-900 mb-4">訓練素材</h4>
+            <h4 className="text-md font-medium text-gray-900 mb-4">參考音頻</h4>
             <FileUpload
               accept=".mp3,.wav,.flac"
               multiple
@@ -108,13 +111,13 @@ export function VoiceModelCreation() {
         <div className="mt-6 pt-6 border-t border-gray-200">
           <div className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">預計訓練時間: <span className="font-medium text-gray-900">15-20分鐘</span></span>
+              <span className="text-sm text-gray-600">用於影片生成時的語音來源</span>
             </div>
             <Button 
               onClick={handleCreateModel}
               disabled={!audioModel.name || trainingFiles.length === 0 || createModelMutation.isPending}
             >
-              {createModelMutation.isPending ? "創建中..." : "開始訓練"}
+              {createModelMutation.isPending ? "上傳中..." : "上傳音頻"}
             </Button>
           </div>
         </div>

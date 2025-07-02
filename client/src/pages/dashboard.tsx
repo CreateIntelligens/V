@@ -33,7 +33,7 @@ export default function Dashboard() {
             </div>
             <nav className="hidden md:flex space-x-8">
               <a href="#dashboard" className="text-primary border-b-2 border-primary pb-4 px-1 text-sm font-medium">儀表板</a>
-              <a href="#models" className="text-gray-500 hover:text-gray-700 pb-4 px-1 text-sm font-medium transition-colors">我的模特</a>
+              <a href="#models" className="text-gray-500 hover:text-gray-700 pb-4 px-1 text-sm font-medium transition-colors">我的資源</a>
               <a href="#generate" className="text-gray-500 hover:text-gray-700 pb-4 px-1 text-sm font-medium transition-colors">內容生成</a>
               <a href="#library" className="text-gray-500 hover:text-gray-700 pb-4 px-1 text-sm font-medium transition-colors">素材庫</a>
             </nav>
@@ -108,7 +108,7 @@ export default function Dashboard() {
           </button>
           <button className="flex flex-col items-center space-y-1 text-gray-400">
             <i className="fas fa-user-circle text-lg"></i>
-            <span className="text-xs">模特</span>
+            <span className="text-xs">資源</span>
           </button>
           <button className="flex flex-col items-center space-y-1 text-gray-400">
             <i className="fas fa-magic text-lg"></i>
