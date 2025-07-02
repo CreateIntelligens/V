@@ -43,13 +43,13 @@ export function BasicTTS() {
     queryKey: ["voices", selectedService],
     queryFn: async () => {
       if (selectedService === "service2") {
-        const response = await fetch(`http://localhost:18200/api/tts/services/${selectedService}/info`);
+        const response = await fetch(`${window.location.origin}/api/tts/services/${selectedService}/info`);
         if (response.ok) {
           const data = await response.json();
           return data.voices?.zh || [];
         }
       } else if (selectedService === "service3") {
-        const response = await fetch(`http://localhost:18200/api/tts/services/${selectedService}/info`);
+        const response = await fetch(`${window.location.origin}/api/tts/services/${selectedService}/info`);
         if (response.ok) {
           const data = await response.json();
           return data.available_models || [];
@@ -131,12 +131,12 @@ export function BasicTTS() {
         
         if (filename) {
           // 直接使用服務器 URL 而不是 blob URL
-          const audioUrl = `http://localhost:8883/audios/${filename}`;
+          const audioUrl = `${window.location.origin}/audios/${filename}`;
           console.log('使用檔案名 URL:', audioUrl);
           return audioUrl;
         } else if (audioPath) {
           // 使用音頻路徑
-          const audioUrl = audioPath.startsWith('http') ? audioPath : `http://localhost:8883${audioPath}`;
+          const audioUrl = audioPath.startsWith('http') ? audioPath : `${window.location.origin}${audioPath}`;
           console.log('使用音頻路徑 URL:', audioUrl);
           return audioUrl;
         } else {

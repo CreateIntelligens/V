@@ -32,7 +32,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
   // 確保使用完整的 URL - 修復相對路徑問題
   const fullAudioUrl = src.startsWith('http') ? src : 
     src.startsWith('blob:') ? src : 
-    `http://localhost:8883${src.startsWith('/') ? src : '/' + src}`;
+    `${window.location.origin}${src.startsWith('/') ? src : '/' + src}`;
 
   useEffect(() => {
     const audio = audioRef.current;
