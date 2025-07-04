@@ -34,6 +34,7 @@ from services.edgetts_service import TTSService1
 from services.minimax_service import TTSService2
 from services.aten_service import TTSService3
 from services.openai_service import TTSService4
+from services.voai_service import VoAIService
 
 app = FastAPI(
     title="HeyGem Custom TTS Services",
@@ -52,7 +53,7 @@ app.add_middleware(
 
 class TTSRequest(BaseModel):
     text: str
-    service: Optional[str] = "service1"  # service1, service2, service3, service4
+    service: Optional[str] = "service1"  # service1, service2, service3, service4, service5, service6
     voice_config: Optional[dict] = None
     format: Optional[str] = "wav"
     language: Optional[str] = "zh"
@@ -106,6 +107,11 @@ async def startup_event():
         tts_services["service4"] = TTSService4()
         await tts_services["service4"].initialize()
         logger.info("✅ TTS Service 4 初始化完成")
+        
+        # 初始化服務 6 - VoAI
+        tts_services["service6"] = VoAIService()
+        await tts_services["service6"].initialize()
+        logger.info("✅ TTS Service 6 (VoAI) 初始化完成")
         
         logger.info("🎉 所有 TTS 服務初始化完成！")
         

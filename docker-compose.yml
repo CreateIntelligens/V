@@ -1,3 +1,5 @@
+name: heygem
+
 networks:
   heygem_network:
     driver: bridge

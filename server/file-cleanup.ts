@@ -4,6 +4,8 @@ import path from 'path';
 // 清理配置
 const CLEANUP_CONFIG = {
   ENABLE_CLEANUP: true,
+  // 暫時停用未收藏內容清理 - 目前沒有收藏功能
+  ENABLE_UNFAVORITED_CLEANUP: false,
   // 未收藏內容的存活時間 (7天 = 604800秒) - 給用戶充足時間決定是否收藏
   UNFAVORITED_TTL: 7 * 24 * 60 * 60, // 7天
   // 臨時 TTS 檔案的存活時間 (2小時) - 避免生成過程中被刪除
@@ -47,17 +49,23 @@ const writeDatabase = (dbPath: string, data: any) => {
   }
 };
 
-// 刪除檔案
+// 刪除檔案或目錄
 const deleteFile = async (filePath: string): Promise<boolean> => {
   try {
     if (fs.existsSync(filePath)) {
-      await fs.unlink(filePath);
-      console.log(`🗑️ 已刪除檔案: ${filePath}`);
+      const stats = await fs.stat(filePath);
+      if (stats.isDirectory()) {
+        await fs.rmdir(filePath, { recursive: true });
+        console.log(`🗑️ 已刪除目錄: ${filePath}`);
+      } else {
+        await fs.unlink(filePath);
+        console.log(`🗑️ 已刪除檔案: ${filePath}`);
+      }
       return true;
     }
     return false;
   } catch (error) {
-    console.warn(`⚠️ 無法刪除檔案: ${filePath}`, error);
+    console.warn(`⚠️ 無法刪除: ${filePath}`, error);
     return false;
   }
 };
@@ -348,7 +356,13 @@ const performCleanup = async () => {
   const startTime = Date.now();
 
   try {
-    await cleanupUnfavoritedContent();
+    // 只有啟用未收藏內容清理時才執行
+    if (CLEANUP_CONFIG.ENABLE_UNFAVORITED_CLEANUP) {
+      await cleanupUnfavoritedContent();
+    } else {
+      console.log('⏭️ 跳過未收藏內容清理 (功能已停用)');
+    }
+    
     await cleanupTempTTSFiles();
     await cleanupTempFiles();
     await cleanupTempDirectory();
@@ -364,12 +378,10 @@ const performCleanup = async () => {
 export const startCleanupService = () => {
   console.log('🚀 啟動自動清理服務...');
   console.log(`📋 清理配置:`, {
-    未收藏內容存活時間: `${CLEANUP_CONFIG.UNFAVORITED_TTL / (24 * 60 * 60)} 天`,
+    未收藏內容清理: CLEANUP_CONFIG.ENABLE_UNFAVORITED_CLEANUP ? '啟用' : '停用',
     TTS檔案存活時間: `${CLEANUP_CONFIG.TTS_FILE_TTL / (60 * 60)} 小時`,
     Temp檔案存活時間: `${CLEANUP_CONFIG.TEMP_FILE_TTL / (60 * 60)} 小時`,
     清理間隔: `${CLEANUP_CONFIG.CLEANUP_INTERVAL / (60 * 60 * 1000)} 小時`,
-    音頻檔案限制: `${CLEANUP_CONFIG.MAX_AUDIO_FILES} 個`,
-    影片檔案限制: `${CLEANUP_CONFIG.MAX_VIDEO_FILES} 個`,
     啟動時清理: CLEANUP_CONFIG.CLEANUP_ON_STARTUP
   });
 

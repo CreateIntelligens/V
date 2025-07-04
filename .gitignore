@@ -13,6 +13,7 @@ uploads
 .clinerules/
 .vscode
 .claude
+CLAUDE.md
 
 # 大型檔案和暫存目錄
 data/temp/

@@ -1,5 +1,5 @@
-import { Brain, Bell } from "lucide-react";
-import { ModelCreation } from "@/components/model-creation";
+import { Brain, Bell, Mic, Video, Home, User, Wand2, Folder } from "lucide-react";
+import { CharacterModelCreation } from "@/components/character-model-creation";
 import { ContentGeneration } from "@/components/content-generation";
 import { VideoGeneration } from "@/components/video-generation";
 import { ModelGrid } from "@/components/model-grid";
@@ -50,7 +50,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Model Creation */}
-        <ModelCreation />
+        <CharacterModelCreation />
 
         {/* Content Generation */}
         <ContentGeneration models={models} />
@@ -77,7 +77,11 @@ export default function Dashboard() {
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                         activity.type === 'audio' ? 'bg-blue-100' : 'bg-purple-100'
                       }`}>
-                        <i className={`fas ${activity.type === 'audio' ? 'fa-microphone text-blue-600' : 'fa-video text-purple-600'}`}></i>
+                        {activity.type === 'audio' ? (
+                          <Mic className="text-blue-600 h-5 w-5" />
+                        ) : (
+                          <Video className="text-purple-600 h-5 w-5" />
+                        )}
                       </div>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">
@@ -103,19 +107,19 @@ export default function Dashboard() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2">
         <div className="flex justify-around">
           <button className="flex flex-col items-center space-y-1 text-primary">
-            <i className="fas fa-home text-lg"></i>
+            <Home className="h-5 w-5" />
             <span className="text-xs">首頁</span>
           </button>
           <button className="flex flex-col items-center space-y-1 text-gray-400">
-            <i className="fas fa-user-circle text-lg"></i>
+            <User className="h-5 w-5" />
             <span className="text-xs">資源</span>
           </button>
           <button className="flex flex-col items-center space-y-1 text-gray-400">
-            <i className="fas fa-magic text-lg"></i>
+            <Wand2 className="h-5 w-5" />
             <span className="text-xs">生成</span>
           </button>
           <button className="flex flex-col items-center space-y-1 text-gray-400">
-            <i className="fas fa-folder text-lg"></i>
+            <Folder className="h-5 w-5" />
             <span className="text-xs">文件</span>
           </button>
         </div>

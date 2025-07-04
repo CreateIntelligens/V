@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { AudioPlayer } from "@/components/audio-player";
 import type { Model } from "@shared/schema";
 
 export function ModelTTS() {
@@ -187,10 +188,7 @@ export function ModelTTS() {
                   下載
                 </Button>
               </div>
-              <audio controls className="w-full">
-                <source src={audioUrl} type="audio/wav" />
-                您的瀏覽器不支援音頻播放
-              </audio>
+              <AudioPlayer src={audioUrl} />
             </div>
           </CardContent>
         </Card>
