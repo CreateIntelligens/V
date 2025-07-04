@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { AudioPlayer } from "@/components/audio-player";
 import { VideoModal } from "@/components/video-modal";
-import { MicOff, Video, Download, Users, Play, Settings, Zap, Expand } from "lucide-react";
+import { MicOff, Video, Download, Users, Play, Settings, Zap, Expand, User, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useQuery } from "@tanstack/react-query";
@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/contexts/user-context";
 import type { Model, InsertGeneratedContent } from "@shared/schema";
 import { VoiceSettings } from "@/components/tts/voice-settings";
+import { VoiceSynthesisPanel } from "@/components/tts/voice-synthesis-panel";
 import { GenerationPanel } from "@/components/generation-panel";
 
 export default function VideoEditor() {
@@ -50,6 +51,27 @@ export default function VideoEditor() {
   });
   const [selectedVoiceModelId, setSelectedVoiceModelId] = useState<string>("");
   const [selectedGeneratedAudioId, setSelectedGeneratedAudioId] = useState<string>("");
+
+  // VoAI 進階設定狀態
+  const [showVoAIAdvanced, setShowVoAIAdvanced] = useState(false);
+  const [voaiModel, setVoaiModel] = useState("Neo");
+  const [voaiStyle, setVoaiStyle] = useState("預設");
+  const [voaiSpeed, setVoaiSpeed] = useState([1.0]);
+  const [voaiPitch, setVoaiPitch] = useState([0]);
+
+  // MiniMax 進階設定狀態
+  const [showMinimaxAdvanced, setShowMinimaxAdvanced] = useState(false);
+  const [minimaxEmotion, setMinimaxEmotion] = useState("neutral");
+  const [minimaxVolume, setMinimaxVolume] = useState([1.0]);
+  const [minimaxSpeed, setMinimaxSpeed] = useState([1.0]);
+  const [minimaxPitch, setMinimaxPitch] = useState([0]);
+
+  // ATEN 進階設定狀態
+  const [showATENAdvanced, setShowATENAdvanced] = useState(false);
+  const [atenPitch, setAtenPitch] = useState([0]);
+  const [atenRate, setAtenRate] = useState([1.0]);
+  const [atenVolume, setAtenVolume] = useState([0]);
+  const [atenSilenceScale, setAtenSilenceScale] = useState([1.0]);
 
   const [videoModalOpen, setVideoModalOpen] = useState(false);
 
@@ -119,60 +141,149 @@ export default function VideoEditor() {
     }
   }, [characterModels, selectedCharacterModelId]);
 
-  // TTS 提供商
+  // 預設選擇第一個可用的語音模型
+  useEffect(() => {
+    if (!selectedVoiceModelId && voiceModels.length > 0) {
+      setSelectedVoiceModelId(voiceModels[0].id.toString());
+    }
+  }, [voiceModels, selectedVoiceModelId]);
+
+  // TTS 提供商 (已更新 - 20250703)
   const ttsProviders = [
     { id: "edgetts", name: "EdgeTTS (微軟)", description: "免費，多語言支援" },
     { id: "minimax", name: "MiniMax", description: "付費，高品質中文，支援情緒控制" },
     { id: "aten", name: "ATEN AIVoice", description: "專業級語音合成，支援中文、英文、台語" },
+    { id: "voai", name: "VoAI (網際智慧)", description: "台灣高品質中文語音，支援多種風格" },
     { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" },
   ];
 
-  // TTS 聲音選項
-  const ttsVoices = {
-    edgetts: [
-      { id: "zh-CN-XiaoxiaoNeural", name: "曉曉 (溫柔女聲)", language: "zh-CN" },
-      { id: "zh-CN-YunxiNeural", name: "雲希 (活潑男聲)", language: "zh-CN" },
-      { id: "zh-CN-XiaoyiNeural", name: "曉伊 (甜美女聲)", language: "zh-CN" },
-      { id: "zh-CN-YunjianNeural", name: "雲健 (沉穩男聲)", language: "zh-CN" },
-      { id: "en-US-JennyNeural", name: "Jenny (美式女聲)", language: "en-US" },
-      { id: "en-US-GuyNeural", name: "Guy (美式男聲)", language: "en-US" },
-    ],
-    minimax: [
-      { id: "moss_audio_069e7ef7-45ab-11f0-b24c-2e48b7cbf811", name: "小安 (女)", language: "zh-CN" },
-      { id: "moss_audio_e2651ab2-50e2-11f0-8bff-3ee21232901d", name: "小賴 (男)", language: "zh-CN" },
-      { id: "moss_audio_9e3d9106-42a6-11f0-b6c4-9e15325fe584", name: "Hayley (女)", language: "zh-CN" },
-    ],
-    aten: [
-      // 男聲聲優
-      { id: "Aaron", name: "沉穩男聲-裕祥", language: "zh-TW" },
-      { id: "Shawn", name: "斯文男聲-俊昇", language: "zh-TW" },
-      { id: "Jason", name: "自在男聲-展河", language: "zh-TW" },
-      { id: "Winston_narrative", name: "悠然男聲-展揚", language: "zh-TW" },
-      { id: "Alan_colloquial", name: "穩健男聲-展仁", language: "zh-TW" },
-      { id: "Waldo_Ad", name: "廣告男聲-展龍", language: "zh-TW" },
-      { id: "Bill_cheerful", name: "活力男聲-力晨", language: "zh-TW" },
-      { id: "Eason_broadcast", name: "廣播男聲-展宏", language: "zh-TW" },
+  // 動態獲取的 TTS 聲音選項
+  const { data: ttsVoicesData, isLoading: voicesLoading } = useQuery({
+    queryKey: ["tts-voices"],
+    queryFn: async () => {
+      // 獲取 EdgeTTS 聲音列表
+      const edgeResponse = await fetch("/api/tts/services/service1/info");
+      const edgeData = await edgeResponse.json();
       
-      // 女聲聲優
-      { id: "Bella_host", name: "動人女聲-貝拉", language: "zh-TW" },
-      { id: "Bella_vivid", name: "開朗女聲-貝拉", language: "zh-TW" },
-      { id: "Rena", name: "溫和女聲-思柔", language: "zh-TW" },
-      { id: "Hannah_colloquial", name: "自在女聲-思涵", language: "zh-TW" },
-      { id: "Michelle_colloquial", name: "悠然女聲-思婷", language: "zh-TW" },
-      { id: "Celia_call_center", name: "客服女聲-思琪", language: "zh-TW" },
-      { id: "Hannah_news", name: "知性女聲-思涵", language: "zh-TW" },
-      { id: "Aurora", name: "穩重女聲-嘉妮", language: "zh-TW" },
+      // 獲取 VoAI 聲音列表
+      const voaiResponse = await fetch("/api/tts/services/service6/info");
+      const voaiData = await voaiResponse.json();
       
-      // 台語聲優
-      { id: "Easton_news", name: "台語男聲-文雄", language: "TL" },
-      { id: "Raina_narrative", name: "台語女聲-思羽", language: "TL" },
-      { id: "Winston_narrative_taigi", name: "台語悠然男聲-展揚", language: "TL" },
-      { id: "Celia_call_center_taigi", name: "台語客服女聲-思琪", language: "TL" },
-    ],
-    fishtts: [
-      { id: "default", name: "預設聲音", language: "zh-CN" },
-    ],
-  };
+      return {
+        edgetts: [
+          // 中文聲音
+          { id: "zh-CN-XiaoxiaoNeural", name: "曉曉 (溫柔女聲)", language: "zh-CN", gender: "Female" },
+          { id: "zh-CN-YunxiNeural", name: "雲希 (活潑男聲)", language: "zh-CN", gender: "Male" },
+          { id: "zh-CN-XiaoyiNeural", name: "曉伊 (甜美女聲)", language: "zh-CN", gender: "Female" },
+          { id: "zh-CN-YunjianNeural", name: "雲健 (沉穩男聲)", language: "zh-CN", gender: "Male" },
+          { id: "zh-CN-YunyangNeural", name: "雲揚 (年輕男聲)", language: "zh-CN", gender: "Male" },
+          { id: "zh-CN-YunxiaNeural", name: "雲夏 (清朗男聲)", language: "zh-CN", gender: "Male" },
+          { id: "zh-TW-HsiaoChenNeural", name: "曉臻 (台灣女聲)", language: "zh-TW", gender: "Female" },
+          { id: "zh-TW-YunJheNeural", name: "雲哲 (台灣男聲)", language: "zh-TW", gender: "Male" },
+          { id: "zh-TW-HsiaoYuNeural", name: "曉雨 (台語女聲)", language: "zh-TW", gender: "Female" },
+          { id: "zh-HK-HiuMaanNeural", name: "曉曼 (香港女聲)", language: "zh-HK", gender: "Female" },
+          { id: "zh-HK-WanLungNeural", name: "雲龍 (香港男聲)", language: "zh-HK", gender: "Male" },
+          { id: "zh-CN-liaoning-XiaobeiNeural", name: "曉北 (東北女聲)", language: "zh-CN", gender: "Female" },
+          { id: "zh-CN-shaanxi-XiaoniNeural", name: "曉妮 (陝西女聲)", language: "zh-CN", gender: "Female" },
+          // 英文聲音
+          { id: "en-US-AriaNeural", name: "Aria (美式女聲)", language: "en-US", gender: "Female" },
+          { id: "en-US-DavisNeural", name: "Davis (美式男聲)", language: "en-US", gender: "Male" },
+          { id: "en-US-GuyNeural", name: "Guy (美式男聲)", language: "en-US", gender: "Male" },
+          { id: "en-US-JennyNeural", name: "Jenny (美式女聲)", language: "en-US", gender: "Female" },
+          { id: "en-US-JasonNeural", name: "Jason (美式男聲)", language: "en-US", gender: "Male" },
+        ],
+        voai: [
+          // 精選主要角色 (可在進階選項中調整風格和模型)
+          { id: "佑希", name: "佑希", speaker: "佑希", language: "zh-TW", gender: "男聲" },
+          { id: "雨榛", name: "雨榛", speaker: "雨榛", language: "zh-TW", gender: "女聲" },
+          { id: "子墨", name: "子墨", speaker: "子墨", language: "zh-TW", gender: "男聲" },
+          { id: "采芸", name: "采芸", speaker: "采芸", language: "zh-TW", gender: "女聲" },
+          { id: "昊宇", name: "昊宇", speaker: "昊宇", language: "zh-TW", gender: "男聲" },
+          { id: "柔洢", name: "柔洢", speaker: "柔洢", language: "zh-TW", gender: "女聲" },
+          { id: "竹均", name: "竹均", speaker: "竹均", language: "zh-TW", gender: "女聲" },
+          { id: "汪一誠", name: "汪一誠", speaker: "汪一誠", language: "zh-TW", gender: "男聲" },
+          { id: "李晴", name: "李晴", speaker: "李晴", language: "zh-TW", gender: "女聲" },
+          { id: "春枝", name: "春枝", speaker: "春枝", language: "zh-TW", gender: "女聲" },
+          { id: "婉婷", name: "婉婷", speaker: "婉婷", language: "zh-TW", gender: "女聲" },
+          { id: "淑芬", name: "淑芬", speaker: "淑芬", language: "zh-TW", gender: "女聲" },
+          { id: "璦廷", name: "璦廷", speaker: "璦廷", language: "zh-TW", gender: "女聲" },
+          { id: "楷心", name: "楷心", speaker: "楷心", language: "zh-TW", gender: "女聲" },
+          { id: "美霞", name: "美霞", speaker: "美霞", language: "zh-TW", gender: "女聲" },
+          { id: "惠婷", name: "惠婷", speaker: "惠婷", language: "zh-TW", gender: "女聲" },
+          { id: "語安", name: "語安", speaker: "語安", language: "zh-TW", gender: "女聲" },
+          { id: "虹葳", name: "虹葳", speaker: "虹葳", language: "zh-TW", gender: "女聲" },
+          { id: "欣妤", name: "欣妤", speaker: "欣妤", language: "zh-TW", gender: "女聲" },
+          { id: "柏翰", name: "柏翰", speaker: "柏翰", language: "zh-TW", gender: "男聲" },
+          { id: "凡萱", name: "凡萱", speaker: "凡萱", language: "zh-TW", gender: "女聲" },
+          { id: "韻菲", name: "韻菲", speaker: "韻菲", language: "zh-TW", gender: "女聲" },
+          { id: "士倫", name: "士倫", speaker: "士倫", language: "zh-TW", gender: "男聲" },
+          { id: "袁祺裕", name: "袁祺裕", speaker: "袁祺裕", language: "zh-TW", gender: "男聲" },
+          { id: "皓軒", name: "皓軒", speaker: "皓軒", language: "zh-TW", gender: "男聲" },
+          { id: "靜芝", name: "靜芝", speaker: "靜芝", language: "zh-TW", gender: "女聲" },
+          { id: "渝函", name: "渝函", speaker: "渝函", language: "zh-TW", gender: "女聲" },
+          { id: "娜娜", name: "娜娜", speaker: "娜娜", language: "zh-TW", gender: "女聲" },
+          { id: "文澤", name: "文澤", speaker: "文澤", language: "zh-TW", gender: "男聲" },
+          { id: "諭書", name: "諭書", speaker: "諭書", language: "zh-TW", gender: "男聲" },
+          { id: "鳳姊", name: "鳳姊", speaker: "鳳姊", language: "zh-TW", gender: "女聲" },
+          { id: "悅青", name: "悅青", speaker: "悅青", language: "zh-TW", gender: "女聲" },
+          { id: "俊傑", name: "俊傑", speaker: "俊傑", language: "zh-TW", gender: "男聲" },
+          { id: "詠芯", name: "詠芯", speaker: "詠芯", language: "zh-TW", gender: "女聲" },
+          { id: "建忠", name: "建忠", speaker: "建忠", language: "zh-TW", gender: "男聲" },
+          { id: "德仔", name: "德仔", speaker: "德仔", language: "zh-TW", gender: "未知" },
+        ],
+        minimax: [
+          { id: "moss_audio_069e7ef7-45ab-11f0-b24c-2e48b7cbf811", name: "小安 (女)", language: "zh-CN" },
+          { id: "moss_audio_e2651ab2-50e2-11f0-8bff-3ee21232901d", name: "小賴 (男)", language: "zh-CN" },
+          { id: "moss_audio_9e3d9106-42a6-11f0-b6c4-9e15325fe584", name: "Hayley (女)", language: "zh-CN" },
+        ],
+        aten: [
+          // 男聲聲優
+          { id: "Aaron", name: "沉穩男聲-裕祥", language: "zh-TW" },
+          { id: "Shawn", name: "斯文男聲-俊昇", language: "zh-TW" },
+          { id: "Jason", name: "自在男聲-展河", language: "zh-TW" },
+          { id: "Winston_narrative", name: "悠然男聲-展揚", language: "zh-TW" },
+          { id: "Alan_colloquial", name: "穩健男聲-展仁", language: "zh-TW" },
+          { id: "Waldo_Ad", name: "廣告男聲-展龍", language: "zh-TW" },
+          { id: "Bill_cheerful", name: "活力男聲-力晨", language: "zh-TW" },
+          { id: "Eason_broadcast", name: "廣播男聲-展宏", language: "zh-TW" },
+          
+          // 女聲聲優
+          { id: "Bella_host", name: "動人女聲-貝拉", language: "zh-TW" },
+          { id: "Bella_vivid", name: "開朗女聲-貝拉", language: "zh-TW" },
+          { id: "Rena", name: "溫和女聲-思柔", language: "zh-TW" },
+          { id: "Hannah_colloquial", name: "自在女聲-思涵", language: "zh-TW" },
+          { id: "Michelle_colloquial", name: "悠然女聲-思婷", language: "zh-TW" },
+          { id: "Celia_call_center", name: "客服女聲-思琪", language: "zh-TW" },
+          { id: "Hannah_news", name: "知性女聲-思涵", language: "zh-TW" },
+          { id: "Aurora", name: "穩重女聲-嘉妮", language: "zh-TW" },
+          
+          // 台語聲優
+          { id: "Easton_news", name: "台語男聲-文雄", language: "TL" },
+          { id: "Raina_narrative", name: "台語女聲-思羽", language: "TL" },
+          { id: "Winston_narrative_taigi", name: "台語悠然男聲-展揚", language: "TL" },
+          { id: "Celia_call_center_taigi", name: "台語客服女聲-思琪", language: "TL" },
+        ],
+        fishtts: [
+          { id: "default", name: "預設聲音", language: "zh-CN" },
+        ],
+      };
+    },
+    staleTime: 5 * 60 * 1000, // 5分鐘
+  });
+
+  // 使用動態獲取的聲音數據，如果沒有則使用空對象
+  const ttsVoices = ttsVoicesData || {};
+
+  // 確保在 TTS 提供商變更時設定正確的預設聲音
+  useEffect(() => {
+    if (selectedTTSProvider && ttsVoices[selectedTTSProvider as keyof typeof ttsVoices] && 
+        !selectedTTSModel) {
+      const defaultVoice = ttsVoices[selectedTTSProvider as keyof typeof ttsVoices]?.[0]?.id;
+      if (defaultVoice) {
+        setSelectedTTSModel(defaultVoice);
+      }
+    }
+  }, [selectedTTSProvider, ttsVoices, selectedTTSModel]);
 
   // MiniMax 情緒選項
   const minimaxEmotions = [
@@ -502,280 +613,347 @@ export default function VideoEditor() {
         <p className="text-gray-600">使用AI模特創建專業的影片和語音內容</p>
       </div>
 
-      <Tabs defaultValue="audio" className="w-full">
+      <Tabs defaultValue="tts-generator" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="audio">語音生成</TabsTrigger>
-          <TabsTrigger value="video">影片生成</TabsTrigger>
+          <TabsTrigger value="tts-generator" className="flex items-center gap-2">
+            <MicOff className="h-4 w-4" />
+            語音生成器
+          </TabsTrigger>
+          <TabsTrigger value="video-generator" className="flex items-center gap-2">
+            <Video className="h-4 w-4" />
+            影片生成器
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="audio" className="space-y-6">
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">語音生成</h3>
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                <div className="xl:col-span-2 space-y-6">
-                  <VoiceSettings
-                    voiceGenerationType={voiceGenerationType}
-                    setVoiceGenerationType={setVoiceGenerationType}
-                    inputText={inputText}
-                    setInputText={setInputText}
-                    selectedTTSProvider={selectedTTSProvider}
-                    setSelectedTTSProvider={setSelectedTTSProvider}
-                    selectedTTSModel={selectedTTSModel}
-                    setSelectedTTSModel={setSelectedTTSModel}
-                    referenceAudio={referenceAudio}
-                    setReferenceAudio={setReferenceAudio}
-                    ttsProviders={ttsProviders}
-                    ttsVoices={ttsVoices}
-                    minimaxEmotions={[]}
-                    voiceModels={voiceModels}
-                    showMinimaxAdvanced={false}
-                    setShowMinimaxAdvanced={() => {}}
-                    minimaxEmotion=""
-                    setMinimaxEmotion={() => {}}
-                    minimaxVolume={[1.0]}
-                    setMinimaxVolume={() => {}}
-                    minimaxSpeed={[1.0]}
-                    setMinimaxSpeed={() => {}}
-                    minimaxPitch={[0]}
-                    setMinimaxPitch={() => {}}
-                    showATENAdvanced={false}
-                    setShowATENAdvanced={() => {}}
-                    atenPitch={[0]}
-                    setAtenPitch={() => {}}
-                    atenRate={[1.0]}
-                    setAtenRate={() => {}}
-                    atenVolume={[0]}
-                    setAtenVolume={() => {}}
-                    atenSilenceScale={[1.0]}
-                    setAtenSilenceScale={() => {}}
-                  />
-                </div>
-
-                <GenerationPanel>
-                  <Button
-                    className="w-full"
-                    onClick={handleGenerateAudio}
-                    disabled={generatingAudio || generateAudioMutation.isPending}
-                  >
-                    <MicOff className="mr-2 h-4 w-4" />
-                    {generatingAudio ? "生成中..." : "生成語音"}
-                  </Button>
-
-                  {generatingAudio && (
-                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                        <span className="text-blue-700 text-sm font-medium">正在生成語音...</span>
-                      </div>
-                      <Progress value={audioProgress} className="h-2" />
-                    </div>
-                  )}
-
-                  {generatedAudio && (
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium text-gray-700">語音預覽</span>
-                        <div className="flex items-center space-x-2">
-                          {generatedAudioId && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleShareMutation.mutate({ id: generatedAudioId, isShared: true })}
-                              className="text-gray-400 hover:text-blue-500"
-                              title="分享給所有人"
-                            >
-                              <Users className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => {
-                              if (generatedAudio) {
-                                const link = document.createElement('a');
-                                link.href = generatedAudio;
-                                link.download = `ai-audio-${Date.now()}.wav`;
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                              }
-                            }}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <AudioPlayer src={generatedAudio} />
-                    </div>
-                  )}
-                </GenerationPanel>
+        {/* 語音生成器 */}
+        <TabsContent value="tts-generator" className="space-y-6">
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-lg border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <MicOff className="h-5 w-5 text-blue-600" />
               </div>
-            </CardContent>
-          </Card>
+              <h3 className="text-xl font-bold text-gray-900">🎤 語音生成器</h3>
+            </div>
+            <p className="text-gray-600 text-sm">
+              使用多種 TTS 服務將文字轉換為自然語音，支援語速、音調等細節調整
+            </p>
+          </div>
+
+          <VoiceSynthesisPanel
+            voiceGenerationType="basic_tts"
+            setVoiceGenerationType={() => {}} // 固定為 basic_tts
+            inputText={inputText}
+            setInputText={setInputText}
+            selectedTTSProvider={selectedTTSProvider}
+            setSelectedTTSProvider={setSelectedTTSProvider}
+            selectedTTSModel={selectedTTSModel}
+            setSelectedTTSModel={setSelectedTTSModel}
+            referenceAudio={referenceAudio}
+            setReferenceAudio={setReferenceAudio}
+            ttsProviders={ttsProviders}
+            ttsVoices={ttsVoices}
+            minimaxEmotions={minimaxEmotions}
+            voiceModels={voiceModels}
+            showMinimaxAdvanced={showMinimaxAdvanced}
+            setShowMinimaxAdvanced={setShowMinimaxAdvanced}
+            minimaxEmotion={minimaxEmotion}
+            setMinimaxEmotion={setMinimaxEmotion}
+            minimaxVolume={minimaxVolume}
+            setMinimaxVolume={setMinimaxVolume}
+            minimaxSpeed={minimaxSpeed}
+            setMinimaxSpeed={setMinimaxSpeed}
+            minimaxPitch={minimaxPitch}
+            setMinimaxPitch={setMinimaxPitch}
+            showATENAdvanced={showATENAdvanced}
+            setShowATENAdvanced={setShowATENAdvanced}
+            atenPitch={atenPitch}
+            setAtenPitch={setAtenPitch}
+            atenRate={atenRate}
+            setAtenRate={setAtenRate}
+            atenVolume={atenVolume}
+            setAtenVolume={setAtenVolume}
+            atenSilenceScale={atenSilenceScale}
+            setAtenSilenceScale={setAtenSilenceScale}
+            showVoAIAdvanced={showVoAIAdvanced}
+            setShowVoAIAdvanced={setShowVoAIAdvanced}
+            voaiModel={voaiModel}
+            setVoaiModel={setVoaiModel}
+            voaiStyle={voaiStyle}
+            setVoaiStyle={setVoaiStyle}
+            voaiSpeed={voaiSpeed}
+            setVoaiSpeed={setVoaiSpeed}
+            voaiPitch={voaiPitch}
+            setVoaiPitch={setVoaiPitch}
+            generatingAudio={generatingAudio}
+            audioProgress={audioProgress}
+            generatedAudio={generatedAudio}
+            onGenerateAudio={handleGenerateAudio}
+            showVoiceTypeSelector={false}
+            showTextInput={true}
+            compact={false}
+          />
         </TabsContent>
 
-        <TabsContent value="video" className="space-y-6">
-          <Card>
+        {/* 影片生成器 */}
+        <TabsContent value="video-generator" className="space-y-6">
+          <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg border">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <Video className="h-5 w-5 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">🎬 影片生成器</h3>
+            </div>
+            <p className="text-gray-600 text-sm">
+              結合人物形象與語音合成，創建個性化的數位人影片內容
+            </p>
+          </div>
+
+          {/* 步驟 1: 選擇人物模型 */}
+          <Card className="shadow-sm border-l-4 border-l-blue-500">
             <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">影片生成 (包含語音)</h3>
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                <div className="xl:col-span-2 space-y-6">
-                  {/* 人物形象選擇 */}
-                  <div>
-                    <Label className="text-base font-semibold">選擇人物形象</Label>
-                    <Select value={selectedCharacterModelId} onValueChange={setSelectedCharacterModelId}>
-                      <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="選擇人物形象" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {characterModels.map((model: Model) => (
-                          <SelectItem key={model.id} value={model.id.toString()}>
-                            <div className="flex items-center space-x-2">
-                              <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">
-                                人物
-                              </span>
-                              <span>{model.name}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <VoiceSettings
-                    voiceGenerationType={voiceGenerationType}
-                    setVoiceGenerationType={setVoiceGenerationType}
-                    inputText={inputText}
-                    setInputText={setInputText}
-                    selectedTTSProvider={selectedTTSProvider}
-                    setSelectedTTSProvider={setSelectedTTSProvider}
-                    selectedTTSModel={selectedTTSModel}
-                    setSelectedTTSModel={setSelectedTTSModel}
-                    referenceAudio={referenceAudio}
-                    setReferenceAudio={setReferenceAudio}
-                    ttsProviders={ttsProviders}
-                    ttsVoices={ttsVoices}
-                    minimaxEmotions={[]}
-                    voiceModels={voiceModels}
-                    showMinimaxAdvanced={false}
-                    setShowMinimaxAdvanced={() => {}}
-                    minimaxEmotion=""
-                    setMinimaxEmotion={() => {}}
-                    minimaxVolume={[1.0]}
-                    setMinimaxVolume={() => {}}
-                    minimaxSpeed={[1.0]}
-                    setMinimaxSpeed={() => {}}
-                    minimaxPitch={[0]}
-                    setMinimaxPitch={() => {}}
-                    showATENAdvanced={false}
-                    setShowATENAdvanced={() => {}}
-                    atenPitch={[0]}
-                    setAtenPitch={() => {}}
-                    atenRate={[1.0]}
-                    setAtenRate={() => {}}
-                    atenVolume={[0]}
-                    setAtenVolume={() => {}}
-                    atenSilenceScale={[1.0]}
-                    setAtenSilenceScale={() => {}}
-                  />
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 font-semibold text-sm">1</span>
                 </div>
-
-                <GenerationPanel>
-                  <Button
-                    className="w-full bg-purple-500 hover:bg-purple-600"
-                    onClick={handleGenerateVideo}
-                    disabled={generatingVideo || generateVideoMutation.isPending}
-                  >
-                    <Video className="mr-2 h-4 w-4" />
-                    {generatingVideo ? "生成中..." : "生成影片"}
-                  </Button>
-
-                  {generatingVideo && (
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
-                        <span className="text-purple-700 text-sm font-medium">正在生成影片...</span>
-                      </div>
-                      <Progress value={videoProgress} className="h-2" />
-                    </div>
-                  )}
-
-                  <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                    {generatedVideo ? (
-                      <div className="w-full h-full relative group">
-                        <video
-                          src={generatedVideo}
-                          controls
-                          className="w-full h-full rounded-lg object-contain"
-                          onError={(e) => {
-                            console.error('影片載入失敗:', e);
-                            toast({
-                              title: "影片載入失敗",
-                              description: "請檢查影片檔案是否存在",
-                              variant: "destructive",
-                            });
-                          }}
-                        >
-                          您的瀏覽器不支援影片播放
-                        </video>
-                        
-                        {/* 放大按鈕 */}
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => setVideoModalOpen(true)}
-                        >
-                          <Expand className="h-4 w-4" />
-                        </Button>
-                        <div className="flex items-center justify-between mt-3">
-                          <span className="text-sm font-medium text-gray-700">影片預覽</span>
-                          <div className="flex items-center space-x-2">
-                            {generatedVideoId && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => toggleShareMutation.mutate({ id: generatedVideoId, isShared: true })}
-                                className="text-gray-400 hover:text-blue-500"
-                                title="分享給所有人"
-                              >
-                                <Users className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => {
-                                if (generatedVideo) {
-                                  const link = document.createElement('a');
-                                  link.href = generatedVideo;
-                                  link.download = `ai-video-${Date.now()}.mp4`;
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  document.body.removeChild(link);
-                                }
-                              }}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </div>
+                <Label className="text-lg font-semibold text-gray-900">選擇人物模型</Label>
+              </div>
+              
+              <Select value={selectedCharacterModelId} onValueChange={setSelectedCharacterModelId}>
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder="選擇要生成影片的人物形象" />
+                </SelectTrigger>
+                <SelectContent>
+                  {characterModels.map((model: Model) => (
+                    <SelectItem key={model.id} value={model.id.toString()}>
+                      <div className="flex items-center space-x-3 w-full py-1">
+                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{model.name}</div>
+                          <div className="text-xs text-gray-500">數位人模型</div>
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-center">
-                        <Video className="text-gray-400 h-8 w-8 mx-auto mb-2" />
-                        <p className="text-gray-500 text-sm">影片將在此顯示</p>
-                      </div>
-                    )}
-                  </div>
-                </GenerationPanel>
-              </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-gray-500 mt-2">
+                💡 選擇一個人物模型作為影片主角
+              </p>
             </CardContent>
           </Card>
+
+          {/* 步驟 2: 配置語音來源 */}
+          <Card className="shadow-sm border-l-4 border-l-green-500">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <span className="text-green-600 font-semibold text-sm">2</span>
+                </div>
+                <Label className="text-lg font-semibold text-gray-900">配置語音來源</Label>
+              </div>
+
+              {/* 語音來源選擇 */}
+              <div className="mb-6">
+                <Label className="text-sm font-medium text-gray-700 mb-3 block">選擇語音生成方式</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card
+                    className={`cursor-pointer transition-all ${
+                      voiceGenerationType === "basic_tts"
+                        ? "ring-2 ring-primary border-primary bg-primary/5"
+                        : "hover:shadow-md hover:bg-gray-50"
+                    }`}
+                    onClick={() => setVoiceGenerationType("basic_tts")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <MicOff className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">使用 TTS 服務</h4>
+                          <p className="text-xs text-gray-600 mt-1">輸入文字，AI 自動轉換成語音</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card
+                    className={`cursor-pointer transition-all ${
+                      voiceGenerationType === "voice_model"
+                        ? "ring-2 ring-primary border-primary bg-primary/5"
+                        : "hover:shadow-md hover:bg-gray-50"
+                    }`}
+                    onClick={() => setVoiceGenerationType("voice_model")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                          <Users className="h-5 w-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">使用語音資源</h4>
+                          <p className="text-xs text-gray-600 mt-1">上傳音檔或使用已儲存的聲音模型</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* 根據選擇顯示對應的配置 */}
+              <VoiceSynthesisPanel
+                voiceGenerationType={voiceGenerationType}
+                setVoiceGenerationType={setVoiceGenerationType}
+                inputText={inputText}
+                setInputText={setInputText}
+                selectedTTSProvider={selectedTTSProvider}
+                setSelectedTTSProvider={setSelectedTTSProvider}
+                selectedTTSModel={selectedTTSModel}
+                setSelectedTTSModel={setSelectedTTSModel}
+                referenceAudio={referenceAudio}
+                setReferenceAudio={setReferenceAudio}
+                ttsProviders={ttsProviders}
+                ttsVoices={ttsVoices}
+                minimaxEmotions={minimaxEmotions}
+                voiceModels={voiceModels}
+                showMinimaxAdvanced={showMinimaxAdvanced}
+                setShowMinimaxAdvanced={setShowMinimaxAdvanced}
+                minimaxEmotion={minimaxEmotion}
+                setMinimaxEmotion={setMinimaxEmotion}
+                minimaxVolume={minimaxVolume}
+                setMinimaxVolume={setMinimaxVolume}
+                minimaxSpeed={minimaxSpeed}
+                setMinimaxSpeed={setMinimaxSpeed}
+                minimaxPitch={minimaxPitch}
+                setMinimaxPitch={setMinimaxPitch}
+                showATENAdvanced={showATENAdvanced}
+                setShowATENAdvanced={setShowATENAdvanced}
+                atenPitch={atenPitch}
+                setAtenPitch={setAtenPitch}
+                atenRate={atenRate}
+                setAtenRate={setAtenRate}
+                atenVolume={atenVolume}
+                setAtenVolume={setAtenVolume}
+                atenSilenceScale={atenSilenceScale}
+                setAtenSilenceScale={setAtenSilenceScale}
+                showVoAIAdvanced={showVoAIAdvanced}
+                setShowVoAIAdvanced={setShowVoAIAdvanced}
+                voaiModel={voaiModel}
+                setVoaiModel={setVoaiModel}
+                voaiStyle={voaiStyle}
+                setVoaiStyle={setVoaiStyle}
+                voaiSpeed={voaiSpeed}
+                setVoaiSpeed={setVoaiSpeed}
+                voaiPitch={voaiPitch}
+                setVoaiPitch={setVoaiPitch}
+                showVoiceTypeSelector={false} // 已經在上面顯示選擇了
+                showTextInput={voiceGenerationType === "basic_tts"} // 只有 TTS 模式才顯示文字輸入
+                compact={false}
+              />
+            </CardContent>
+          </Card>
+
+          {/* 步驟 3: 生成影片 */}
+          <Card className="shadow-sm border-l-4 border-l-orange-500">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 font-semibold text-sm">3</span>
+                </div>
+                <Label className="text-lg font-semibold text-gray-900">生成影片</Label>
+              </div>
+              
+              <Button 
+                onClick={handleGenerateVideo}
+                disabled={generatingVideo || generateVideoMutation.isPending || !selectedCharacterModelId}
+                size="lg"
+                className="w-full h-12 text-base"
+              >
+                {generatingVideo ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <Video className="h-5 w-5 mr-2" />
+                    🎬 開始生成數位人影片
+                  </>
+                )}
+              </Button>
+              
+              {generatingVideo && (
+                <div className="mt-4">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>生成進度</span>
+                    <span>{videoProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-orange-500 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${videoProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    正在合成人物形象和語音，預計需要 2-5 分鐘...
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 步驟 4: 影片預覽 */}
+          {generatedVideo && (
+            <Card className="shadow-sm border-l-4 border-l-purple-500 bg-gradient-to-r from-purple-50 to-blue-50">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                    <span className="text-purple-600 font-semibold text-sm">4</span>
+                  </div>
+                  <Label className="text-lg font-semibold text-gray-900">🎬 影片預覽與下載</Label>
+                </div>
+                
+                <div className="space-y-4">
+                  <video
+                    src={generatedVideo}
+                    controls
+                    className="w-full max-w-lg mx-auto rounded-lg shadow-md"
+                    onError={(e) => {
+                      console.error('影片載入失敗:', e);
+                      toast({
+                        title: "影片載入失敗",
+                        description: "請檢查影片檔案是否存在",
+                        variant: "destructive",
+                      });
+                    }}
+                  >
+                    您的瀏覽器不支援影片播放
+                  </video>
+                  
+                  <div className="flex gap-2 justify-center">
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={generatedVideo} download>
+                        <Download className="h-4 w-4 mr-2" />
+                        下載影片
+                      </a>
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setVideoModalOpen(true)}
+                    >
+                      <Expand className="h-4 w-4 mr-2" />
+                      全螢幕預覽
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
+
 
       </Tabs>
 

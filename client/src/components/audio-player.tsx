@@ -57,19 +57,20 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     const handleError = (e: Event) => {
       console.error('AudioPlayer: 音頻載入錯誤', e, { src, retryCount });
       
-      // 如果重試次數少於3次，等待2秒後重試
-      if (retryCount < 3) {
-        console.log(`AudioPlayer: 準備重試 (${retryCount + 1}/3)`, { src });
+      // 如果重試次數少於2次，等待1秒後重試
+      if (retryCount < 2) {
+        console.log(`AudioPlayer: 準備重試 (${retryCount + 1}/2)`, { src });
         setRetryCount(prev => prev + 1);
         
         retryTimeoutRef.current = setTimeout(() => {
           console.log(`AudioPlayer: 執行重試 ${retryCount + 1}`, { src });
           if (audio) {
+            audio.src = fullAudioUrl; // 重新設定 src
             audio.load();
           }
-        }, 2000);
+        }, 1000);
       } else {
-        setError('音頻載入失敗');
+        setError('音頻文件暫時無法播放，請嘗試下載');
         setIsLoading(false);
       }
     };
@@ -136,10 +137,20 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
 
   if (error) {
     return (
-      <div className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded">
-        <AlertCircle className="h-4 w-4 text-red-500" />
-        <span className="text-sm text-red-700">{error}</span>
-        <span className="text-xs text-red-500">URL: {src}</span>
+      <div className="space-y-2">
+        <div className="flex items-center space-x-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <span className="text-sm text-yellow-800">{error}</span>
+        </div>
+        {/* 備用的原生音頻播放器 */}
+        <audio 
+          controls 
+          src={fullAudioUrl}
+          className="w-full h-8"
+          preload="metadata"
+        >
+          您的瀏覽器不支援音頻播放
+        </audio>
       </div>
     );
   }
@@ -179,9 +190,6 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
         </span>
       </div>
       
-      <div className="text-xs text-gray-400">
-        音頻 URL: {src}
-      </div>
       
       <audio 
         ref={audioRef} 

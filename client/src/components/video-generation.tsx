@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Play, Download, Loader2, Video, Upload, User, Mic } from "lucide-react";
+import { VoiceSynthesisPanel } from "@/components/tts/voice-synthesis-panel";
 
 interface VideoGenerationProps {
   onVideoGenerated?: (videoUrl: string) => void;
@@ -33,14 +34,38 @@ const EDGETTS_VOICES = [
 export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
   const { toast } = useToast();
   const [selectedModel, setSelectedModel] = useState<string>("1751016573603");
-  const [selectedProvider, setSelectedProvider] = useState<string>("edgetts");
-  const [selectedVoice, setSelectedVoice] = useState<string>("zh-CN-XiaoxiaoNeural");
-  const [voiceType, setVoiceType] = useState<string>("edgetts"); // "edgetts" or "custom"
   const [textInput, setTextInput] = useState("");
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [taskCode, setTaskCode] = useState<string>("");
+
+  // 語音生成相關狀態
+  const [voiceGenerationType, setVoiceGenerationType] = useState<"basic_tts" | "voice_model">("basic_tts");
+  const [selectedTTSProvider, setSelectedTTSProvider] = useState("edgetts");
+  const [selectedTTSModel, setSelectedTTSModel] = useState("zh-CN-XiaoxiaoNeural");
+  const [referenceAudio, setReferenceAudio] = useState<File | null>(null);
+
+  // VoAI 進階設定狀態
+  const [showVoAIAdvanced, setShowVoAIAdvanced] = useState(false);
+  const [voaiModel, setVoaiModel] = useState("Neo");
+  const [voaiStyle, setVoaiStyle] = useState("預設");
+  const [voaiSpeed, setVoaiSpeed] = useState([1.0]);
+  const [voaiPitch, setVoaiPitch] = useState([0]);
+
+  // MiniMax 進階設定狀態
+  const [showMinimaxAdvanced, setShowMinimaxAdvanced] = useState(false);
+  const [minimaxEmotion, setMinimaxEmotion] = useState("neutral");
+  const [minimaxVolume, setMinimaxVolume] = useState([1.0]);
+  const [minimaxSpeed, setMinimaxSpeed] = useState([1.0]);
+  const [minimaxPitch, setMinimaxPitch] = useState([0]);
+
+  // ATEN 進階設定狀態
+  const [showATENAdvanced, setShowATENAdvanced] = useState(false);
+  const [atenPitch, setAtenPitch] = useState([0]);
+  const [atenRate, setAtenRate] = useState([1.0]);
+  const [atenVolume, setAtenVolume] = useState([0]);
+  const [atenSilenceScale, setAtenSilenceScale] = useState([1.0]);
 
   // 獲取可用的人物模型
   const { data: modelsData, isLoading, error } = useQuery({
@@ -57,26 +82,66 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     },
   });
 
+  // 獲取 TTS 提供商
+  const { data: ttsProvidersData } = useQuery({
+    queryKey: ["/api/tts/providers"],
+    select: (data: any) => data?.data || [],
+  });
+
+  // 獲取 TTS 聲音列表
+  const { data: ttsVoicesData } = useQuery({
+    queryKey: ["/api/tts/voices"],
+    select: (data: any) => data?.data || {},
+  });
+
+  // 獲取 MiniMax 情緒列表
+  const { data: minimaxEmotionsData } = useQuery({
+    queryKey: ["/api/tts/minimax/emotions"],
+    select: (data: any) => data?.data || [],
+  });
+
   // 載入保存的選擇
   useEffect(() => {
     const savedModel = localStorage.getItem('selectedVideoModel');
     const savedProvider = localStorage.getItem('selectedVideoProvider');
     const savedVoice = localStorage.getItem('selectedVideoVoice');
-    const savedVoiceType = localStorage.getItem('selectedVideoVoiceType');
     
     if (savedModel) {
       setSelectedModel(savedModel);
     }
     if (savedProvider && TTS_PROVIDERS.find(p => p.id === savedProvider)) {
-      setSelectedProvider(savedProvider);
+      setSelectedTTSProvider(savedProvider);
     }
     if (savedVoice) {
-      setSelectedVoice(savedVoice);
-    }
-    if (savedVoiceType && ["edgetts", "custom"].includes(savedVoiceType)) {
-      setVoiceType(savedVoiceType);
+      setSelectedTTSModel(savedVoice);
     }
   }, []);
+
+  // 設定TTS預設值
+  useEffect(() => {
+    if (ttsProvidersData && ttsProvidersData.length > 0 && !selectedTTSProvider) {
+      const defaultProvider = ttsProvidersData[0]?.id || "edgetts";
+      setSelectedTTSProvider(defaultProvider);
+    }
+  }, [ttsProvidersData, selectedTTSProvider]);
+
+  // 設定語音角色預設值
+  useEffect(() => {
+    if (selectedTTSProvider && ttsVoicesData && ttsVoicesData[selectedTTSProvider] && !selectedTTSModel) {
+      const defaultVoice = ttsVoicesData[selectedTTSProvider]?.[0]?.id || "";
+      if (defaultVoice) {
+        setSelectedTTSModel(defaultVoice);
+      }
+    }
+  }, [selectedTTSProvider, ttsVoicesData, selectedTTSModel]);
+
+  // 設定人物模型預設值
+  useEffect(() => {
+    if (modelsData && modelsData.length > 0 && !selectedModel) {
+      const defaultModel = modelsData[0]?.id?.toString() || "1751016573603";
+      setSelectedModel(defaultModel);
+    }
+  }, [modelsData, selectedModel]);
 
   // 記住用戶的選擇
   useEffect(() => {
@@ -86,33 +151,44 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
   }, [selectedModel]);
 
   useEffect(() => {
-    if (selectedProvider) {
-      localStorage.setItem('selectedVideoProvider', selectedProvider);
+    if (selectedTTSProvider) {
+      localStorage.setItem('selectedVideoProvider', selectedTTSProvider);
     }
-  }, [selectedProvider]);
+  }, [selectedTTSProvider]);
 
   useEffect(() => {
-    if (selectedVoice) {
-      localStorage.setItem('selectedVideoVoice', selectedVoice);
+    if (selectedTTSModel) {
+      localStorage.setItem('selectedVideoVoice', selectedTTSModel);
     }
-  }, [selectedVoice]);
-
-  useEffect(() => {
-    if (voiceType) {
-      localStorage.setItem('selectedVideoVoiceType', voiceType);
-    }
-  }, [voiceType]);
+  }, [selectedTTSModel]);
 
 
   // 本地影片生成
   const generateVideoMutation = useMutation({
-    mutationFn: async (data: { text: string; modelId: string; provider: string; ttsModel: string; voiceType: string }) => {
+    mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/generate/video", {
         inputText: data.text,
         modelId: data.modelId,
         provider: data.provider,
         ttsModel: data.ttsModel,
         voiceType: data.voiceType,
+        // 添加 TTS 高級設定
+        voiceGenerationType: data.voiceGenerationType,
+        // VoAI 設定
+        voaiModel: data.voaiModel,
+        voaiStyle: data.voaiStyle,
+        voaiSpeed: data.voaiSpeed,
+        voaiPitch: data.voaiPitch,
+        // MiniMax 設定
+        minimaxEmotion: data.minimaxEmotion,
+        minimaxVolume: data.minimaxVolume,
+        minimaxSpeed: data.minimaxSpeed,
+        minimaxPitch: data.minimaxPitch,
+        // ATEN 設定
+        atenPitch: data.atenPitch,
+        atenRate: data.atenRate,
+        atenVolume: data.atenVolume,
+        atenSilenceScale: data.atenSilenceScale,
       });
       return response.json();
     },
@@ -212,31 +288,30 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
     generateVideoMutation.mutate({
       text: textInput,
       modelId: selectedModel,
-      provider: voiceType === "custom" ? "custom" : selectedProvider,
-      ttsModel: selectedVoice,
-      voiceType: voiceType,
+      provider: selectedTTSProvider,
+      ttsModel: selectedTTSModel,
+      voiceType: voiceGenerationType,
+      // 傳遞語音生成類型
+      voiceGenerationType: voiceGenerationType,
+      // VoAI 設定
+      voaiModel: voaiModel,
+      voaiStyle: voaiStyle,
+      voaiSpeed: voaiSpeed,
+      voaiPitch: voaiPitch,
+      // MiniMax 設定
+      minimaxEmotion: minimaxEmotion,
+      minimaxVolume: minimaxVolume,
+      minimaxSpeed: minimaxSpeed,
+      minimaxPitch: minimaxPitch,
+      // ATEN 設定
+      atenPitch: atenPitch,
+      atenRate: atenRate,
+      atenVolume: atenVolume,
+      atenSilenceScale: atenSilenceScale,
     });
   };
 
   const selectedModelData = modelsData?.find((m: any) => m.id.toString() === selectedModel);
-  const selectedProviderData = TTS_PROVIDERS.find(p => p.id === selectedProvider);
-  
-  // 自動判斷聲音模型類型並獲取對應資料
-  const selectedVoiceData = (() => {
-    // 先在 EdgeTTS 中查找
-    const edgeTTSVoice = EDGETTS_VOICES.find(v => v.id === selectedVoice);
-    if (edgeTTSVoice) {
-      return edgeTTSVoice;
-    }
-    
-    // 再在自定義聲音中查找
-    const customVoice = voiceModelsData?.find(v => v.id.toString() === selectedVoice);
-    if (customVoice) {
-      return customVoice;
-    }
-    
-    return null;
-  })();
 
   return (
     <div className="space-y-6">
@@ -264,13 +339,13 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
               <SelectContent>
                 {modelsData?.map((model: any) => (
                   <SelectItem key={model.id} value={model.id.toString()}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <div className="flex items-center gap-3 w-full py-1">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                         <User className="h-4 w-4 text-blue-600" />
                       </div>
-                      <div>
-                        <div className="font-medium">{model.name}</div>
-                        <div className="text-sm text-gray-500">{model.description || '人物形象'}</div>
+                      <div className="flex flex-col items-start flex-1 min-w-0">
+                        <div className="font-medium text-left truncate w-full">{model.name}</div>
+                        <div className="text-sm text-gray-500 text-left truncate w-full">{model.description || '人物形象'}</div>
                       </div>
                     </div>
                   </SelectItem>
@@ -284,130 +359,57 @@ export function VideoGeneration({ onVideoGenerated }: VideoGenerationProps) {
             )}
           </div>
 
-          {/* 聲音模型選擇 */}
-          <div className="space-y-3">
-            <Label className="text-base font-semibold flex items-center gap-2">
-              <Play className="h-4 w-4 text-purple-600" />
-              選擇聲音模型
-            </Label>
-            <Select value={selectedVoice} onValueChange={(value) => {
-              setSelectedVoice(value);
-              // 自動判斷是 EdgeTTS 或自定義聲音
-              const isEdgeTTS = EDGETTS_VOICES.some(v => v.id === value);
-              const isCustom = voiceModelsData?.some((v: any) => v.id.toString() === value);
-              
-              if (isEdgeTTS) {
-                setVoiceType("edgetts");
-                setSelectedProvider("edgetts");
-              } else if (isCustom) {
-                setVoiceType("custom");
-                setSelectedProvider("custom");
-              }
-            }}>
-              <SelectTrigger>
-                <SelectValue placeholder="選擇聲音模型" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* EdgeTTS 聲音 */}
-                <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
-                  EdgeTTS 內建聲音
-                </div>
-                {EDGETTS_VOICES.map((voice) => (
-                  <SelectItem key={voice.id} value={voice.id}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <Play className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <div>
-                        <div className="font-medium">{voice.name}</div>
-                        <div className="text-sm text-gray-500">{voice.language}</div>
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-                
-                {/* 自定義聲音 */}
-                {voiceModelsData && voiceModelsData.length > 0 && (
-                  <>
-                    <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-50 border-t">
-                      我的聲音模型
-                    </div>
-                    {voiceModelsData.map((voice: any) => (
-                      <SelectItem key={voice.id} value={voice.id.toString()}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Mic className="h-4 w-4 text-blue-600" />
-                          </div>
-                          <div>
-                            <div className="font-medium">{voice.name}</div>
-                            <div className="text-sm text-gray-500">自定義聲音</div>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-            
-            {/* 顯示目前選擇的聲音資訊 */}
-            {selectedVoiceData && (
-              <div className={`p-3 border rounded-lg ${
-                voiceType === "edgetts" 
-                  ? "bg-purple-50 border-purple-200"
-                  : "bg-blue-50 border-blue-200"
-              }`}>
-                <div className="flex items-center gap-2">
-                  {voiceType === "edgetts" ? (
-                    <Play className="h-4 w-4 text-purple-600" />
-                  ) : (
-                    <Mic className="h-4 w-4 text-blue-600" />
-                  )}
-                  <span className={`text-sm font-medium ${
-                    voiceType === "edgetts" ? "text-purple-700" : "text-blue-700"
-                  }`}>
-                    {selectedVoiceData.name}
-                  </span>
-                </div>
-                <div className={`text-xs mt-1 ${
-                  voiceType === "edgetts" ? "text-purple-600" : "text-blue-600"
-                }`}>
-                  {voiceType === "edgetts" ? '內建 EdgeTTS 聲音' : '自定義聲音模型'}
-                </div>
-              </div>
-            )}
-            
-            {/* 提示上傳聲音模型 */}
-            {(!voiceModelsData || voiceModelsData.length === 0) && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center gap-2 text-yellow-700">
-                  <Upload className="h-4 w-4" />
-                  <span className="text-sm font-medium">沒有自定義聲音模型</span>
-                </div>
-                <div className="text-xs text-yellow-600 mt-1">
-                  您可以到「聲音管理」頁面上傳聲音檔案來創建自定義聲音模型
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 文字內容 */}
-          <div className="space-y-3">
-            <Label htmlFor="textContent" className="text-base font-semibold">
-              影片文字內容
-            </Label>
-            <Textarea
-              id="textContent"
-              placeholder="輸入您希望 AI 頭像說的內容...&#10;&#10;範例：&#10;大家好，我是您的 AI 助手。今天我要為您介紹我們最新的產品功能。這個功能可以幫助您提高工作效率，節省寶貴的時間。"
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              rows={6}
-              className="resize-none"
+          {/* 語音合成面板 */}
+          <div className="border-t pt-6">
+            <VoiceSynthesisPanel
+              voiceGenerationType={voiceGenerationType}
+              setVoiceGenerationType={setVoiceGenerationType}
+              inputText={textInput}
+              setInputText={setTextInput}
+              selectedTTSProvider={selectedTTSProvider}
+              setSelectedTTSProvider={setSelectedTTSProvider}
+              selectedTTSModel={selectedTTSModel}
+              setSelectedTTSModel={setSelectedTTSModel}
+              referenceAudio={referenceAudio}
+              setReferenceAudio={setReferenceAudio}
+              ttsProviders={ttsProvidersData || []}
+              ttsVoices={ttsVoicesData || {}}
+              minimaxEmotions={minimaxEmotionsData || []}
+              voiceModels={voiceModelsData || []}
+              showMinimaxAdvanced={showMinimaxAdvanced}
+              setShowMinimaxAdvanced={setShowMinimaxAdvanced}
+              minimaxEmotion={minimaxEmotion}
+              setMinimaxEmotion={setMinimaxEmotion}
+              minimaxVolume={minimaxVolume}
+              setMinimaxVolume={setMinimaxVolume}
+              minimaxSpeed={minimaxSpeed}
+              setMinimaxSpeed={setMinimaxSpeed}
+              minimaxPitch={minimaxPitch}
+              setMinimaxPitch={setMinimaxPitch}
+              showATENAdvanced={showATENAdvanced}
+              setShowATENAdvanced={setShowATENAdvanced}
+              atenPitch={atenPitch}
+              setAtenPitch={setAtenPitch}
+              atenRate={atenRate}
+              setAtenRate={setAtenRate}
+              atenVolume={atenVolume}
+              setAtenVolume={setAtenVolume}
+              atenSilenceScale={atenSilenceScale}
+              setAtenSilenceScale={setAtenSilenceScale}
+              showVoAIAdvanced={showVoAIAdvanced}
+              setShowVoAIAdvanced={setShowVoAIAdvanced}
+              voaiModel={voaiModel}
+              setVoaiModel={setVoaiModel}
+              voaiStyle={voaiStyle}
+              setVoaiStyle={setVoaiStyle}
+              voaiSpeed={voaiSpeed}
+              setVoaiSpeed={setVoaiSpeed}
+              voaiPitch={voaiPitch}
+              setVoaiPitch={setVoaiPitch}
+              showVoiceTypeSelector={false}
+              showTextInput={true}
+              compact={true}
             />
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>建議長度：50-500 字</span>
-              <span>{textInput.length} 字</span>
-            </div>
           </div>
 
           {/* 生成按鈕 */}

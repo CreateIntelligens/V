@@ -639,12 +639,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               };
               break;
               
+            case "voai":
+              serviceId = "service6";
+              
+              // 解析 VoAI 聲音配置
+              let voiceName = contentData.ttsModel || "佑希";  // 直接使用角色名稱
+              let voiceStyle = contentData.voaiStyle || "預設";
+              let voiceModel = contentData.voaiModel || "Neo";
+              
+              voiceConfig = {
+                voice: voiceName,
+                style: voiceStyle,
+                model: voiceModel,
+                speed: Array.isArray(contentData.voaiSpeed) ? contentData.voaiSpeed[0] : (contentData.voaiSpeed || 1.0),
+                pitch_shift: Array.isArray(contentData.voaiPitch) ? contentData.voaiPitch[0] : (contentData.voaiPitch || 0),
+                style_weight: contentData.voaiStyleWeight || 0,
+                breath_pause: contentData.voaiBreathPause || 0
+              };
+              
+              console.log(`🎭 VoAI 聲音配置: ${voiceName} (${voiceStyle}) - ${voiceModel} 模型, 語速: ${voiceConfig.speed}, 音調: ${voiceConfig.pitch_shift}`);
+              break;
+              
             case "custom":
               // 使用自定義聲音模型
               try {
                 const customVoiceModel = await storage.getModel(parseInt(contentData.ttsModel));
                 if (customVoiceModel && customVoiceModel.type === "voice") {
-                  serviceId = "service5"; // 自定義聲音服務
+                  serviceId = "service100"; // 自定義聲音服務
                   voiceConfig = {
                     modelId: customVoiceModel.id,
                     modelName: customVoiceModel.name,
@@ -739,7 +760,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`✅ 音頻檔案已創建: ${finalAudioPath} (${audioData.length} bytes)`);
         } catch (error) {
-          console.error('調用 EdgeTTS 服務失敗:', error);
+          console.error('調用 TTS 服務失敗:', error);
           
           // 如果 TTS 服務失敗，創建一個靜音檔案作為備用
           try {
@@ -886,12 +907,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   };
                   break;
                   
+                case "voai":
+                  serviceId = "service6";
+                  
+                  // 解析 VoAI 聲音配置
+                  let voiceName = contentData.ttsModel || "佑希";  // 直接使用角色名稱
+                  let voiceStyle = contentData.voaiStyle || "預設";
+                  let voiceModel = contentData.voaiModel || "Neo";
+                  
+                  voiceConfig = {
+                    voice: voiceName,
+                    style: voiceStyle,
+                    model: voiceModel,
+                    speed: Array.isArray(contentData.voaiSpeed) ? contentData.voaiSpeed[0] : (contentData.voaiSpeed || 1.0),
+                    pitch_shift: Array.isArray(contentData.voaiPitch) ? contentData.voaiPitch[0] : (contentData.voaiPitch || 0),
+                    style_weight: contentData.voaiStyleWeight || 0,
+                    breath_pause: contentData.voaiBreathPause || 0
+                  };
+                  
+                  console.log(`🎭 VoAI 聲音配置: ${voiceName} (${voiceStyle}) - ${voiceModel} 模型, 語速: ${voiceConfig.speed}, 音調: ${voiceConfig.pitch_shift}`);
+                  break;
+                  
                 case "custom":
                   // 使用自定義聲音模型
                   try {
                     const customVoiceModel = await storage.getModel(parseInt(contentData.ttsModel));
                     if (customVoiceModel && customVoiceModel.type === "voice") {
-                      serviceId = "service5"; // 自定義聲音服務
+                      serviceId = "service100"; // 自定義聲音服務
                       voiceConfig = {
                         modelId: customVoiceModel.id,
                         modelName: customVoiceModel.name,

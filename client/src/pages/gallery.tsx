@@ -189,12 +189,26 @@ export default function Gallery() {
     // EdgeTTS 音色映射
     if (provider === 'edgetts') {
       const edgeTTSVoices: { [key: string]: string } = {
+        // 中文聲音
         'zh-CN-XiaoxiaoNeural': '曉曉 (溫柔女聲)',
         'zh-CN-YunxiNeural': '雲希 (活潑男聲)',
         'zh-CN-XiaoyiNeural': '曉伊 (甜美女聲)',
         'zh-CN-YunjianNeural': '雲健 (沉穩男聲)',
+        'zh-CN-YunyangNeural': '雲揚 (年輕男聲)',
+        'zh-CN-YunxiaNeural': '雲夏 (清朗男聲)',
+        'zh-TW-HsiaoChenNeural': '曉臻 (台灣女聲)',
+        'zh-TW-YunJheNeural': '雲哲 (台灣男聲)',
+        'zh-TW-HsiaoYuNeural': '曉雨 (台語女聲)',
+        'zh-HK-HiuMaanNeural': '曉曼 (香港女聲)',
+        'zh-HK-WanLungNeural': '雲龍 (香港男聲)',
+        'zh-CN-liaoning-XiaobeiNeural': '曉北 (東北女聲)',
+        'zh-CN-shaanxi-XiaoniNeural': '曉妮 (陝西女聲)',
+        // 英文聲音
+        'en-US-AriaNeural': 'Aria (美式女聲)',
+        'en-US-DavisNeural': 'Davis (美式男聲)',
+        'en-US-GuyNeural': 'Guy (美式男聲)',
         'en-US-JennyNeural': 'Jenny (美式女聲)',
-        'en-US-GuyNeural': 'Guy (美式男聲)'
+        'en-US-JasonNeural': 'Jason (美式男聲)'
       };
       return edgeTTSVoices[ttsModel] || ttsModel;
     }
@@ -639,6 +653,39 @@ export default function Gallery() {
                       </div>
                     )}
 
+                    {item.type === 'video' && item.status === 'completed' && item.outputPath && (
+                      <div className="aspect-video bg-gray-100 rounded-lg mb-4 overflow-hidden flex items-center justify-center relative group cursor-pointer">
+                        <video 
+                          src={item.outputPath}
+                          controls 
+                          className="max-w-full max-h-full object-contain"
+                          onError={(e) => {
+                            console.error('影片載入失敗:', e);
+                            console.error('影片路徑:', item.outputPath);
+                          }}
+                        >
+                          您的瀏覽器不支援影片播放
+                        </video>
+                        
+                        {/* 放大按鈕 */}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedVideo({
+                              src: item.outputPath,
+                              title: `影片內容 - ${item.id}`,
+                              id: item.id
+                            });
+                          }}
+                        >
+                          <Expand className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
                       <span>時長: {formatDuration(item.duration)}</span>
                       <span>情感: {item.emotion}</span>
@@ -653,7 +700,8 @@ export default function Gallery() {
                           if (item.outputPath) {
                             const link = document.createElement('a');
                             link.href = item.outputPath;
-                            link.download = `audio-${item.id}-${Date.now()}.wav`;
+                            const fileExtension = item.type === 'audio' ? 'wav' : 'mp4';
+                            link.download = `${item.type}-${item.id}-${Date.now()}.${fileExtension}`;
                             document.body.appendChild(link);
                             link.click();
                             document.body.removeChild(link);
@@ -663,9 +711,14 @@ export default function Gallery() {
                         <Download className="mr-2 h-4 w-4" />
                         下載
                       </Button>
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleToggleShare(item)}
+                      >
                         <Share className="mr-2 h-4 w-4" />
-                        分享
+                        {item.isFavorite ? "取消分享" : "分享"}
                       </Button>
                     </div>
                   </CardContent>

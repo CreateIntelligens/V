@@ -15,6 +15,7 @@ const TTS_SERVICES = [
   { id: "service2", name: "MiniMax", description: "MiniMax AI 語音" },
   { id: "service3", name: "ATEN AIVoice", description: "ATEN 專業語音合成" },
   { id: "service4", name: "OpenAI", description: "OpenAI TTS" },
+  { id: "service6", name: "VoAI", description: "網際智慧中文語音" },
 ];
 
 const EMOTIONS = [
@@ -54,10 +55,23 @@ export function BasicTTS() {
           const data = await response.json();
           return data.available_models || [];
         }
+      } else if (selectedService === "service6") {
+        // VoAI 服務的聲音選項
+        return [
+          { id: "佑希-預設", name: "佑希 (預設)", speaker: "佑希", style: "預設" },
+          { id: "佑希-可愛", name: "佑希 (可愛)", speaker: "佑希", style: "可愛" },
+          { id: "佑希-聊天", name: "佑希 (聊天)", speaker: "佑希", style: "聊天" },
+          { id: "小雅-預設", name: "小雅 (預設)", speaker: "小雅", style: "預設" },
+          { id: "小雅-溫柔", name: "小雅 (溫柔)", speaker: "小雅", style: "溫柔" },
+          { id: "小雅-專業", name: "小雅 (專業)", speaker: "小雅", style: "專業" },
+          { id: "志明-預設", name: "志明 (預設)", speaker: "志明", style: "預設" },
+          { id: "志明-沉穩", name: "志明 (沉穩)", speaker: "志明", style: "沉穩" },
+          { id: "志明-活潑", name: "志明 (活潑)", speaker: "志明", style: "活潑" },
+        ];
       }
       return [];
     },
-    enabled: selectedService === "service2" || selectedService === "service3",
+    enabled: selectedService === "service2" || selectedService === "service3" || selectedService === "service6",
   });
 
   // 當服務改變時重置音色選擇
@@ -66,6 +80,8 @@ export function BasicTTS() {
       setSelectedVoice(voicesData[0].id);
     } else if (selectedService === "service3" && voicesData && voicesData.length > 0) {
       setSelectedVoice(voicesData[0].model_id);
+    } else if (selectedService === "service6" && voicesData && voicesData.length > 0) {
+      setSelectedVoice(voicesData[0].id);
     } else {
       setSelectedVoice("");
     }
@@ -101,6 +117,24 @@ export function BasicTTS() {
           volume: (volume[0] - 1) * 6, // 轉換為 ATEN 的 -6~+6 範圍
           silence_scale: 1.0,
         };
+      }
+      
+      // 如果是 VoAI 服務，添加語音配置
+      if (service === "service6") {
+        if (selectedVoice) {
+          const voiceData = voicesData?.find((v: any) => v.id === selectedVoice);
+          if (voiceData) {
+            requestBody.voice_config = {
+              voice: voiceData.speaker,
+              style: voiceData.style,
+              model: "Neo",
+              speed: speed[0],
+              pitch_shift: pitch[0],
+              style_weight: 0,
+              breath_pause: 0,
+            };
+          }
+        }
       }
 
       const response = await fetch("/api/tts/generate", {
@@ -299,6 +333,41 @@ export function BasicTTS() {
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-700">
                     正在載入聲優列表...請確認 ATEN AIVoice 服務已啟動
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VoAI 音色選擇 */}
+          {selectedService === "service6" && (
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">選擇 VoAI 聲音</Label>
+              {voicesData && voicesData.length > 0 ? (
+                <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="選擇聲音" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {voicesData.map((voice: any) => (
+                      <SelectItem key={voice.id} value={voice.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <Volume2 className="h-4 w-4 text-green-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{voice.name}</div>
+                            <div className="text-sm text-gray-500">VoAI 中文語音</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-700">
+                    正在載入 VoAI 聲音列表...請確認 VoAI 服務已啟動
                   </p>
                 </div>
               )}
