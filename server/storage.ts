@@ -265,8 +265,10 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async getModel(id: number): Promise<Model | undefined> {
-    return this.models.get(id);
+  async getModel(id: number | string): Promise<Model | undefined> {
+    // 支援字串和數字 ID，統一轉換為數字
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    return this.models.get(numId);
   }
 
   async createModel(insertModel: InsertModel): Promise<Model> {
@@ -287,17 +289,21 @@ export class MemStorage implements IStorage {
     return model;
   }
 
-  async updateModel(id: number, updates: Partial<Model>): Promise<Model | undefined> {
-    const existing = this.models.get(id);
+  async updateModel(id: number | string, updates: Partial<Model>): Promise<Model | undefined> {
+    // 支援字串和數字 ID，統一轉換為數字
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    const existing = this.models.get(numId);
     if (!existing) return undefined;
     
     const updated = { ...existing, ...updates };
-    this.models.set(id, updated);
+    this.models.set(numId, updated);
     return updated;
   }
 
-  async deleteModel(id: number): Promise<boolean> {
-    return this.models.delete(id);
+  async deleteModel(id: number | string): Promise<boolean> {
+    // 支援字串和數字 ID，統一轉換為數字
+    const numId = typeof id === 'string' ? parseInt(id) : id;
+    return this.models.delete(numId);
   }
 
   async getGeneratedContent(userId?: string): Promise<GeneratedContent[]> {
