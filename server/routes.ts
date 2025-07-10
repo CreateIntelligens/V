@@ -14,7 +14,7 @@ const upload = multer({
     destination: (req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
       // 統一將上傳的模特檔案存放到 data/models 目錄
-      if (['.mp3', '.wav', '.flac', '.mp4', '.avi', '.mov'].includes(ext)) {
+      if (['.mp3', '.wav', '.mp4', '.avi', '.mov'].includes(ext)) {
         const modelsDir = path.join(process.cwd(), 'data', 'models');
         // 確保目錄存在
         fs.ensureDirSync(modelsDir);
@@ -35,7 +35,7 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024, // 100MB limit
   },
   fileFilter: (req: any, file: any, cb: any) => {
-    const allowedTypes = ['.mp3', '.wav', '.flac', '.zip', '.png', '.jpg', '.jpeg', '.mp4', '.avi', '.mov'];
+    const allowedTypes = ['.mp3', '.wav', '.zip', '.png', '.jpg', '.jpeg', '.mp4', '.avi', '.mov'];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowedTypes.includes(ext));
   }
@@ -162,6 +162,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // CORS 由 nginx 統一處理，避免重複設置
     }
   }));
+
+  // 通用檔案API路由 - 統一檔案訪問入口
+  app.get('/api/files/:filename', (req, res) => {
+    const filename = req.params.filename;
+    
+    // 嘗試多個可能的檔案位置
+    const possiblePaths = [
+      path.join(process.cwd(), 'data', 'audios', filename),
+      path.join(process.cwd(), 'data', 'videos', filename), 
+      path.join(process.cwd(), 'data', 'models', filename),
+      path.join(process.cwd(), 'data', 'temp', filename)
+    ];
+    
+    for (const filePath of possiblePaths) {
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filename).toLowerCase();
+        
+        // 設置正確的 Content-Type
+        if (ext === '.mp3') {
+          res.setHeader('Content-Type', 'audio/mpeg');
+        } else if (ext === '.wav') {
+          res.setHeader('Content-Type', 'audio/wav');
+        } else if (ext === '.flac') {
+          res.setHeader('Content-Type', 'audio/flac');
+        } else if (ext === '.mp4') {
+          res.setHeader('Content-Type', 'video/mp4');
+        } else if (ext === '.avi') {
+          res.setHeader('Content-Type', 'video/x-msvideo');
+        } else if (ext === '.mov') {
+          res.setHeader('Content-Type', 'video/quicktime');
+        }
+        
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        
+        // 發送檔案
+        return res.sendFile(filePath);
+      }
+    }
+    
+    // 檔案不存在
+    console.log(`❌ 檔案不存在: ${filename}, 嘗試過的路徑:`, possiblePaths);
+    res.status(404).json({ 
+      success: false, 
+      message: '檔案不存在',
+      error: 'File not found',
+      filename: filename
+    });
+  });
 
 
   // User routes

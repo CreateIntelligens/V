@@ -221,7 +221,7 @@ export function ModelGrid({ models }: ModelGridProps) {
                     <div className="w-full bg-gray-50 rounded-lg p-3 border">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600 truncate flex-1">
-                          {model.trainingFiles[0].split('/').pop()}
+                          音頻檔案
                         </span>
                         <Button
                           variant="ghost"

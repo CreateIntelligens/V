@@ -133,7 +133,7 @@ export function CharacterModelCreation() {
           <div>
             <h4 className="text-md font-medium text-gray-900 mb-4">人物影片</h4>
             <FileUpload
-              accept=".mp4,.avi,.mov,.mkv"
+              accept=".mp4,.avi,.mov"
               multiple={false}
               onFilesChange={setTrainingFiles}
               onActualFilesChange={setActualFiles}

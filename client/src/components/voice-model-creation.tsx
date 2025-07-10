@@ -19,14 +19,44 @@ export function VoiceModelCreation() {
     speed: 60,
   });
   const [trainingFiles, setTrainingFiles] = useState<string[]>([]);
+  const [actualFiles, setActualFiles] = useState<File[]>([]);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
   const createModelMutation = useMutation({
-    mutationFn: async (modelData: InsertModel) => {
-      const response = await apiRequest("POST", "/api/models", modelData);
+    mutationFn: async (modelData: InsertModel & { actualFiles?: File[] }) => {
+      let uploadedFileNames: string[] = [];
+      
+      // 先上傳檔案
+      if (modelData.actualFiles && modelData.actualFiles.length > 0) {
+        const formData = new FormData();
+        modelData.actualFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error('檔案上傳失敗');
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        uploadedFileNames = uploadResult.files.map((f: any) => f.filename);
+      }
+      
+      // 創建模型記錄，使用實際上傳的檔案名稱
+      const finalModelData = {
+        ...modelData,
+        trainingFiles: uploadedFileNames.length > 0 ? uploadedFileNames : modelData.trainingFiles,
+      };
+      delete finalModelData.actualFiles;
+      
+      const response = await apiRequest("POST", "/api/models", finalModelData);
       return response.json();
     },
     onSuccess: () => {
@@ -38,6 +68,7 @@ export function VoiceModelCreation() {
       // Reset form
       setAudioModel({ name: "", pitch: 50, speed: 60 });
       setTrainingFiles([]);
+      setActualFiles([]);
     },
     onError: () => {
       toast({
@@ -49,7 +80,7 @@ export function VoiceModelCreation() {
   });
 
   const handleCreateModel = () => {
-    const modelData: InsertModel = {
+    const modelData: InsertModel & { actualFiles?: File[] } = {
       name: audioModel.name,
       type: "voice",
       provider: "heygem",
@@ -62,7 +93,8 @@ export function VoiceModelCreation() {
       }),
       characterSettings: null,
       trainingFiles: trainingFiles,
-      userId: currentUser?.username || "global", // 添加 userId
+      userId: currentUser?.username || "global",
+      actualFiles: actualFiles, // 添加實際檔案
     };
 
     createModelMutation.mutate(modelData);
@@ -100,10 +132,11 @@ export function VoiceModelCreation() {
           <div>
             <h4 className="text-md font-medium text-gray-900 mb-4">參考音頻</h4>
             <FileUpload
-              accept=".mp3,.wav,.flac"
+              accept=".mp3,.wav"
               multiple
               onFilesChange={setTrainingFiles}
-              description="支持 MP3, WAV, FLAC 格式，最大 100MB"
+              onActualFilesChange={setActualFiles}
+              description="支持 MP3, WAV 格式，最大 100MB"
             />
           </div>
         </div>
@@ -115,7 +148,7 @@ export function VoiceModelCreation() {
             </div>
             <Button 
               onClick={handleCreateModel}
-              disabled={!audioModel.name || trainingFiles.length === 0 || createModelMutation.isPending}
+              disabled={!audioModel.name || actualFiles.length === 0 || createModelMutation.isPending}
             >
               {createModelMutation.isPending ? "上傳中..." : "上傳音頻"}
             </Button>
