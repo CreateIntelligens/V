@@ -16,6 +16,7 @@ uploads
 CLAUDE.md
 
 # 大型檔案和暫存目錄
+data/result/
 data/temp/
 data/face2face/temp/
 data/face2face/result/

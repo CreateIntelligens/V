@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 
 const TTS_SERVICES = [
   { id: "service1", name: "EdgeTTS", description: "微軟語音服務" },
-  { id: "service2", name: "MiniMax", description: "MiniMax AI 語音" },
+  // { id: "service2", name: "MiniMax", description: "MiniMax AI 語音" }, // 暫時移除：API 過期
   { id: "service3", name: "ATEN AIVoice", description: "ATEN 專業語音合成" },
-  { id: "service4", name: "OpenAI", description: "OpenAI TTS" },
+  // { id: "service4", name: "OpenAI", description: "OpenAI TTS" }, // 暫時移除：未完成測試
   { id: "service6", name: "VoAI", description: "網際智慧中文語音" },
 ];
 
@@ -71,14 +71,12 @@ export function BasicTTS() {
       }
       return [];
     },
-    enabled: selectedService === "service2" || selectedService === "service3" || selectedService === "service6",
+    enabled: selectedService === "service3" || selectedService === "service6",
   });
 
   // 當服務改變時重置音色選擇
   useEffect(() => {
-    if (selectedService === "service2" && voicesData && voicesData.length > 0) {
-      setSelectedVoice(voicesData[0].id);
-    } else if (selectedService === "service3" && voicesData && voicesData.length > 0) {
+    if (selectedService === "service3" && voicesData && voicesData.length > 0) {
       setSelectedVoice(voicesData[0].model_id);
     } else if (selectedService === "service6" && voicesData && voicesData.length > 0) {
       setSelectedVoice(voicesData[0].id);
@@ -232,15 +230,16 @@ export function BasicTTS() {
           <CardTitle className="flex items-center gap-2">
             <Mic className="h-5 w-5 text-blue-600" />
             AI 語音生成
-            {selectedService === "service2" && (
+            {/* {selectedService === "service2" && (
               <Zap className="h-4 w-4 text-yellow-500" />
-            )}
+            )} */}
           </CardTitle>
           <p className="text-sm text-gray-600">
-            {selectedService === "service2" 
+            {/* {selectedService === "service2" 
               ? "使用 MiniMax AI 技術生成高品質語音，支援情緒和音色控制"
               : "選擇不同的 TTS 服務來生成語音"
-            }
+            } */}
+            選擇不同的 TTS 服務來生成語音
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -269,8 +268,8 @@ export function BasicTTS() {
             </Select>
           </div>
 
-          {/* MiniMax 音色選擇 */}
-          {selectedService === "service2" && (
+          {/* MiniMax 音色選擇 - 暫時註解 */}
+          {/* {selectedService === "service2" && (
             <div className="space-y-3">
               <Label className="text-base font-semibold">選擇音色</Label>
               {voicesData && voicesData.length > 0 ? (
@@ -302,7 +301,7 @@ export function BasicTTS() {
                 </div>
               )}
             </div>
-          )}
+          )} */
 
           {/* ATEN 音色選擇 */}
           {selectedService === "service3" && (
@@ -374,8 +373,8 @@ export function BasicTTS() {
             </div>
           )}
 
-          {/* MiniMax 進階設定 */}
-          {selectedService === "service2" && (
+          {/* MiniMax 進階設定 - 暫時註解 */}
+          {/* {selectedService === "service2" && (
             <div className="space-y-3">
               <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
                 <CollapsibleTrigger asChild>
@@ -387,7 +386,7 @@ export function BasicTTS() {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-4 mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
                   {/* 情緒選擇 */}
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label htmlFor="emotion" className="text-sm font-medium">情緒表達</Label>
                     <Select value={selectedEmotion} onValueChange={setSelectedEmotion}>
                       <SelectTrigger>
@@ -401,10 +400,10 @@ export function BasicTTS() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div> */}
 
                   {/* 音量控制 */}
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label className="text-sm font-medium">音量: {volume[0].toFixed(1)}</Label>
                     <Slider
                       value={volume}
@@ -418,10 +417,10 @@ export function BasicTTS() {
                       <span>0.1 (最小)</span>
                       <span>2.0 (最大)</span>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* 語速控制 */}
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label className="text-sm font-medium">語速: {speed[0].toFixed(1)}</Label>
                     <Slider
                       value={speed}
@@ -435,10 +434,10 @@ export function BasicTTS() {
                       <span>0.5 (慢)</span>
                       <span>2.0 (快)</span>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* 音調控制 */}
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label className="text-sm font-medium">音調: {pitch[0] > 0 ? '+' : ''}{pitch[0]}</Label>
                     <Slider
                       value={pitch}
@@ -452,11 +451,11 @@ export function BasicTTS() {
                       <span>-12 (低)</span>
                       <span>+12 (高)</span>
                     </div>
-                  </div>
-                </CollapsibleContent>
+                  </div> */}
+                {/* </CollapsibleContent>
               </Collapsible>
             </div>
-          )}
+          )} */
 
           {/* 文字輸入 */}
           <div className="space-y-3">
@@ -525,10 +524,11 @@ export function BasicTTS() {
           {/* 功能說明 */}
           <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
             <h5 className="font-medium text-gray-900 mb-2">
-              {selectedService === "service2" ? "MiniMax TTS 特色" : "TTS 服務特色"}
+              {/* {selectedService === "service2" ? "MiniMax TTS 特色" : "TTS 服務特色"} */}
+              TTS 服務特色
             </h5>
             <ul className="text-sm text-gray-600 space-y-1">
-              {selectedService === "service2" ? (
+              {/* {selectedService === "service2" ? (
                 <>
                   <li>• 支援多種自定義音色，聲音自然生動</li>
                   <li>• 豐富的情緒表達：開心、悲傷、憤怒等</li>
@@ -541,7 +541,10 @@ export function BasicTTS() {
                   <li>• 支援中文和英文語音</li>
                   <li>• 簡單易用，適合基本需求</li>
                 </>
-              )}
+              )} */}
+              <li>• 快速語音合成，即時生成</li>
+              <li>• 支援中文和英文語音</li>
+              <li>• 簡單易用，適合基本需求</li>
             </ul>
           </div>
         </CardContent>

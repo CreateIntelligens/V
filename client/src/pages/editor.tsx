@@ -148,13 +148,13 @@ export default function VideoEditor() {
     }
   }, [voiceModels, selectedVoiceModelId]);
 
-  // TTS 提供商 (已更新 - 20250703)
+  // TTS 提供商 (已更新 - 20250709) - 移除 MiniMax 和 FishTTS
   const ttsProviders = [
     { id: "edgetts", name: "EdgeTTS (微軟)", description: "免費，多語言支援" },
-    { id: "minimax", name: "MiniMax", description: "付費，高品質中文，支援情緒控制" },
+    // { id: "minimax", name: "MiniMax", description: "付費，高品質中文，支援情緒控制" }, // 暫時移除：API 過期
     { id: "aten", name: "ATEN AIVoice", description: "專業級語音合成，支援中文、英文、台語" },
     { id: "voai", name: "VoAI (網際智慧)", description: "台灣高品質中文語音，支援多種風格" },
-    { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" },
+    // { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" }, // 暫時移除：未完成測試
   ];
 
   // 動態獲取的 TTS 聲音選項
@@ -231,11 +231,11 @@ export default function VideoEditor() {
           { id: "建忠", name: "建忠", speaker: "建忠", language: "zh-TW", gender: "男聲" },
           { id: "德仔", name: "德仔", speaker: "德仔", language: "zh-TW", gender: "未知" },
         ],
-        minimax: [
-          { id: "moss_audio_069e7ef7-45ab-11f0-b24c-2e48b7cbf811", name: "小安 (女)", language: "zh-CN" },
-          { id: "moss_audio_e2651ab2-50e2-11f0-8bff-3ee21232901d", name: "小賴 (男)", language: "zh-CN" },
-          { id: "moss_audio_9e3d9106-42a6-11f0-b6c4-9e15325fe584", name: "Hayley (女)", language: "zh-CN" },
-        ],
+        // minimax: [
+        //   { id: "moss_audio_069e7ef7-45ab-11f0-b24c-2e48b7cbf811", name: "小安 (女)", language: "zh-CN" },
+        //   { id: "moss_audio_e2651ab2-50e2-11f0-8bff-3ee21232901d", name: "小賴 (男)", language: "zh-CN" },
+        //   { id: "moss_audio_9e3d9106-42a6-11f0-b6c4-9e15325fe584", name: "Hayley (女)", language: "zh-CN" },
+        // ],
         aten: [
           // 男聲聲優
           { id: "Aaron", name: "沉穩男聲-裕祥", language: "zh-TW" },
@@ -263,9 +263,9 @@ export default function VideoEditor() {
           { id: "Winston_narrative_taigi", name: "台語悠然男聲-展揚", language: "TL" },
           { id: "Celia_call_center_taigi", name: "台語客服女聲-思琪", language: "TL" },
         ],
-        fishtts: [
-          { id: "default", name: "預設聲音", language: "zh-CN" },
-        ],
+        // fishtts: [
+        //   { id: "default", name: "預設聲音", language: "zh-CN" },
+        // ],
       };
     },
     staleTime: 5 * 60 * 1000, // 5分鐘
@@ -285,7 +285,17 @@ export default function VideoEditor() {
     }
   }, [selectedTTSProvider, ttsVoices, selectedTTSModel]);
 
-  // MiniMax 情緒選項
+  // MiniMax 情緒選項 (已註解 - 服務暫時移除)
+  // const minimaxEmotions = [
+  //   { id: "neutral", name: "中性" },
+  //   { id: "happy", name: "開心" },
+  //   { id: "sad", name: "悲傷" },
+  //   { id: "angry", name: "憤怒" },
+  //   { id: "surprised", name: "驚訝" },
+  //   { id: "calm", name: "平靜" },
+  // ];
+  
+  // 保留 MiniMax 情緒選項供未來使用
   const minimaxEmotions = [
     { id: "neutral", name: "中性" },
     { id: "happy", name: "開心" },

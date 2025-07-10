@@ -440,14 +440,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { isShared, userId } = req.body;
       
       // 先獲取模特資訊
+      console.log(`🔍 嘗試獲取模型 ID: ${id} (類型: ${typeof id})`);
       const model = await storage.getModel(id);
       if (!model) {
+        console.error(`❌ 模型不存在: ${id}`);
         return res.status(404).json({ 
           success: false,
           message: "模特不存在",
           error: "Model not found" 
         });
       }
+      console.log(`✅ 找到模型: ${model.name} (ID: ${model.id})`);
+      
       
       // 權限檢查：只有創建者和管理員可以切換分享狀態
       if (userId) {
