@@ -152,9 +152,9 @@ export default function VideoEditor() {
   const ttsProviders = [
     { id: "edgetts", name: "EdgeTTS (微軟)", description: "免費，多語言支援" },
     // { id: "minimax", name: "MiniMax", description: "付費，高品質中文，支援情緒控制" }, // 暫時移除：API 過期
-    { id: "aten", name: "ATEN AIVoice", description: "專業級語音合成，支援中文、英文、台語" },
+    // { id: "aten", name: "ATEN AIVoice", description: "專業級語音合成，支援中文、英文、台語" },
     { id: "voai", name: "VoAI (網際智慧)", description: "台灣高品質中文語音，支援多種風格" },
-    // { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" }, // 暫時移除：未完成測試
+    { id: "fishtts", name: "FishTTS", description: "開源，可自訓練" },
   ];
 
   // 動態獲取的 TTS 聲音選項

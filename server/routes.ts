@@ -12,16 +12,17 @@ import fs from "fs-extra";
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
-      // 統一將上傳的模特檔案存放到 data/models 目錄
-      if (['.mp3', '.wav', '.mp4', '.avi', '.mov'].includes(ext)) {
-        const modelsDir = path.join(process.cwd(), 'data', 'models');
-        // 確保目錄存在
-        fs.ensureDirSync(modelsDir);
-        cb(null, modelsDir);
-      } else {
-        cb(null, 'data/models/'); // 預設放模特目錄
+      // 影片生成時的參考音頻，存放到 temp 目錄
+      if (req.originalUrl.includes('/api/generate/video')) {
+        const tempDir = path.join(process.cwd(), 'data', 'temp');
+        fs.ensureDirSync(tempDir);
+        return cb(null, tempDir);
       }
+      
+      // 其他上傳（如模特創建）預設存放到 models 目錄
+      const modelsDir = path.join(process.cwd(), 'data', 'models');
+      fs.ensureDirSync(modelsDir);
+      cb(null, modelsDir);
     },
     filename: (req, file, cb) => {
       // 生成唯一檔名
@@ -47,13 +48,27 @@ interface MulterRequest extends Request {
   body: any;
 }
 
+// UTC+8 時間格式化函數
+function getTaipeiTime(): string {
+  return new Date().toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // 健康檢查端點
   app.get("/api/health", (req, res) => {
     res.json({
       success: true,
       message: "服務正常運行",
-      timestamp: new Date().toISOString(),
+      timestamp: getTaipeiTime(),
       uptime: process.uptime()
     });
   });
@@ -64,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       success: true,
       message: "聲音選擇界面已更新",
       version: "2.0",
-      timestamp: new Date().toISOString(),
+      timestamp: getTaipeiTime(),
       features: [
         "統一聲音模型選擇下拉選單",
         "EdgeTTS 內建聲音分組",
@@ -865,9 +880,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let requestData = req.body;
       const multerReq = req as MulterRequest;
       
+      console.log(`📤 收到影片生成請求 - body:`, requestData);
+      console.log(`📎 上傳檔案資訊:`, multerReq.file ? {
+        filename: multerReq.file.filename,
+        originalname: multerReq.file.originalname,
+        size: multerReq.file.size
+      } : '無檔案');
+      
       // 如果有上傳的檔案，加入到請求資料中
       if (multerReq.file) {
         requestData.referenceAudio = multerReq.file;
+        console.log(`✅ 已設定 referenceAudio:`, {
+          filename: multerReq.file.filename,
+          originalname: multerReq.file.originalname
+        });
       }
       
       // 確保 modelId 存在
@@ -920,9 +946,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`👤 使用人物形象 ID: ${contentData.modelId}`);
           console.log(`🔧 使用提供商: ${contentData.provider || 'edgetts'}`);
           
-          // 先生成音頻
+          // 先檢查音頻來源
           let audioUrl = null;
-          if (contentData.inputText) {
+          
+          // 檢查是否有上傳的音頻文件 (現場上傳)
+          if (contentData.voiceSource === 'reference' && multerReq.file) {
+            // Multer 已將檔案儲存到 data/temp，直接使用檔名建立 URL
+            const uploadedAudioFile = multerReq.file.filename;
+            console.log(`🎵 使用現場上傳音頻: ${uploadedAudioFile} (已存放於 data/temp)`);
+            audioUrl = `http://heygem-web:5000/api/files/${uploadedAudioFile}`;
+          } else if (contentData.voiceSource === 'model' && contentData.ttsModel) {
+            // 使用現有語音模型
+            try {
+              const voiceModel = await storage.getModel(parseInt(contentData.ttsModel, 10));
+              if (voiceModel && voiceModel.trainingFiles && voiceModel.trainingFiles.length > 0) {
+                const voiceFile = voiceModel.trainingFiles[0];
+                audioUrl = `http://heygem-web:5000/models/${voiceFile}`;
+                console.log(`🎵 使用語音模型: ${voiceModel.name} (${voiceFile})`);
+              } else {
+                throw new Error(`語音模型 ${contentData.ttsModel} 沒有關聯的音頻檔案`);
+              }
+            } catch (error) {
+              console.error(`❌ 獲取語音模型失敗: ${error}`);
+              return res.status(400).json({ success: false, message: `語音模型載入失敗: ${error}` });
+            }
+          } else if (contentData.inputText) {
             try {
               // 根據提供商選擇對應的服務
               let serviceId = "service1"; // 默認 EdgeTTS
@@ -1054,6 +1102,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (error) {
               console.error('TTS 生成失敗:', error);
             }
+          } else {
+            // 沒有輸入文字也沒有上傳音頻，檢查模型是否有現有的音頻
+            try {
+              const model = await storage.getModel(contentData.modelId);
+              if (model && model.audioPath) {
+                audioUrl = `http://heygem-web:5000${model.audioPath}`;
+                console.log(`🎵 使用模型現有音頻: ${model.audioPath}`);
+              } else {
+                throw new Error('沒有可用的音頻源：請提供文字內容或上傳音頻文件');
+              }
+            } catch (modelError) {
+              console.error(`❌ 獲取模型音頻失敗: ${modelError}`);
+              throw new Error('沒有可用的音頻源：請提供文字內容或上傳音頻文件');
+            }
           }
           
           // 根據 modelId 獲取對應的人物形象影片
@@ -1076,13 +1138,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const possiblePaths = [
                 // 1. 新的統一模特目錄（優先）
                 path.join(process.cwd(), 'data', 'models', trainingFile),
-                // 2. heygem_data 目錄（Vref 標準位置，向後相容）
-                path.join('D:', 'heygem_data', 'face2face', 'temp', trainingFile),
-                // 3. 當前專案的 videos 目錄（向後相容）
+                // 2. 當前專案的 videos 目錄（向後相容）
                 path.join(process.cwd(), 'data', 'videos', trainingFile),
-                // 4. 如果是已知的預設檔案，直接使用
-                trainingFile === '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4' ? 
-                  path.join('D:', 'heygem_data', 'face2face', 'temp', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4') : null
+                // 3. 當前專案的 temp 目錄
+                path.join(process.cwd(), 'data', 'temp', trainingFile)
               ].filter((p): p is string => !!p);
               
               // 檢查檔案是否存在
@@ -1104,10 +1163,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // 如果都沒找到，但有預設檔案可用
               if (!modelVideoFile) {
-                const defaultVideoPath = path.join('D:', 'heygem_data', 'face2face', 'temp', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4');
+                const defaultVideoPath = path.join(process.cwd(), 'data', 'videos', '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4');
                 if (await fs.pathExists(defaultVideoPath)) {
                   modelVideoFile = '3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4';
-                  modelVideoUrl = `file://${defaultVideoPath}`;
+                  modelVideoUrl = `http://heygem-web:5000/videos/3d02623d-33f7-4183-af4d-d0e1971ffd2d-r.mp4`;
                   console.log(`⚠️ 使用預設人物形象影片: ${defaultVideoPath}`);
                 }
               }
@@ -1118,13 +1177,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // 如果沒有找到有效的模特影片，返回錯誤
           if (!modelVideoFile) {
-            throw new Error(`人物形象影片不存在。請確認檔案已上傳到正確位置：D:/heygem_data/face2face/temp/`);
+            throw new Error(`人物形象影片不存在。請確認檔案已上傳到 data/models 或 data/videos`);
+          }
+          
+          // 確認有有效的音頻 URL
+          if (!audioUrl) {
+            throw new Error('沒有可用的音頻源：請提供文字內容、上傳音頻文件，或確保模型有關聯的音頻');
           }
           
           // 調用 Face2Face 服務生成影片
           const face2faceData = {
-            audio_url: audioUrl || `http://heygem-nginx:8883/videos/${modelVideoFile}`, // 使用生成的音頻或通過 nginx 訪問
-            video_url: `http://heygem-nginx:8883/videos/${modelVideoFile}`, // 人物模型視頻 URL - 通過 nginx 訪問
+            audio_url: audioUrl, // 必須有有效的音頻 URL
+            video_url: `http://heygem-nginx:${process.env.NGINX_HTTPS_PORT || '8883'}/videos/${modelVideoFile}`, // 人物模型視頻 URL - 通過 nginx 訪問
             code: taskCode,
             chaofen: 0,
             watermark_switch: 0,
@@ -1455,91 +1519,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (contentIdMatch) {
           const contentId = contentIdMatch[1];
           
-          // 如果任務完成 (status === 2) 或者 Face2Face 返回 code 10004（任務不存在，可能已完成）
-          if (taskStatus === 2 || face2faceResult.code === 10004) {
+          // 如果任務完成 (status === 2)
+          if (taskStatus === 2) {
             try {
-              // 檢查本地結果檔案是否存在（因為Docker volume已掛載到本地）
               const resultFileName = `${taskCode}-r.mp4`;
               const newVideoName = `generated_video_${contentId}.mp4`;
               const tempVideoPath = path.join(process.cwd(), 'data', 'temp', resultFileName);
               const localVideoPath = path.join(process.cwd(), 'data', 'videos', newVideoName);
-              
-              if (await fs.pathExists(tempVideoPath)) {
-                // 確保目錄存在
-                await fs.ensureDir(path.dirname(localVideoPath));
-                
-                // 直接複製本地檔案（不使用docker cp）
-                try {
-                  await fs.copy(tempVideoPath, localVideoPath);
-                  console.log(`✅ 影片已複製到: ${localVideoPath}`);
-                      
-                      // 獲取影片時長
-                  let videoDuration = 12; // 預設時長
-                  try {
-                    const { exec } = await import('child_process');
-                    const ffprobeCommand = `ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${localVideoPath}"`;
-                    exec(ffprobeCommand, (ffprobeError: any, ffprobeStdout: any) => {
-                      if (!ffprobeError && ffprobeStdout.trim()) {
-                        videoDuration = Math.round(parseFloat(ffprobeStdout.trim()));
-                      }
-                    });
-                  } catch (ffprobeError) {
-                    console.log('無法獲取影片時長，使用預設值');
-                  }
-                  
-                  // 複製臨時音頻文件到最終位置供用戶下載
-                  try {
-                    const tempAudioPath = path.join(process.cwd(), 'data', 'audios', `temp_audio_${contentId}.wav`);
-                    const finalAudioPath = path.join(process.cwd(), 'data', 'audios', `audio_${contentId}.wav`);
-                    
-                    if (await fs.pathExists(tempAudioPath)) {
-                      await fs.copy(tempAudioPath, finalAudioPath);
-                      console.log(`🎵 已複製音頻文件: ${tempAudioPath} -> ${finalAudioPath}`);
-                      
-                      // 清理臨時音頻文件
-                      await fs.remove(tempAudioPath);
-                      console.log(`🧹 已清理臨時音頻文件: ${tempAudioPath}`);
-                    }
-                  } catch (audioCopyError) {
-                    console.error(`音頻文件複製失敗: ${audioCopyError}`);
-                  }
 
-                  // 更新資料庫狀態為完成
-                  try {
-                    await storage.updateGeneratedContent(parseInt(contentId, 10), {
-                      status: "completed",
-                      outputPath: `/videos/${newVideoName}`,
-                      duration: videoDuration
-                    });
-                    console.log(`✅ 資料庫狀態已更新: ${contentId} -> completed`);
-                    
-                    // 更新回應數據
-                    face2faceResult.data.status = 2;
-                    face2faceResult.data.result = resultFileName;
-                    face2faceResult.data.video_url = `/videos/${newVideoName}`;
-                    face2faceResult.data.local_path = localVideoPath;
-                    
-                  } catch (updateError) {
-                    console.error(`資料庫更新失敗: ${updateError}`);
-                  }
-                  
-                  // 清理臨時檔案
-                  try {
-                    await fs.remove(tempVideoPath);
-                    console.log(`🧹 已清理臨時檔案: ${tempVideoPath}`);
-                  } catch (cleanupError) {
-                    console.error(`清理失敗: ${cleanupError}`);
-                  }
-                  
-                } catch (copyError) {
-                  console.error(`檔案複製失敗: ${copyError}`);
-                }
+              if (!await fs.pathExists(tempVideoPath)) {
+                console.log(`[處理中] ⚠️ 未找到結果檔案 ${tempVideoPath}，將在下次輪詢時重試。`);
               } else {
-                console.log(`⚠️ 未找到結果檔案: ${tempVideoPath}`);
+                console.log(`[處理中] ✅ 找到結果檔案 ${tempVideoPath}，開始處理...`);
+                await fs.ensureDir(path.dirname(localVideoPath));
+                await fs.copy(tempVideoPath, localVideoPath);
+                console.log(`[處理中] ✅ 影片已複製到: ${localVideoPath}`);
+
+                let videoDuration = 10; // Default duration
+                try {
+                  const { execSync } = await import('child_process');
+                  const ffprobeCommand = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${localVideoPath}"`;
+                  const durationOutput = execSync(ffprobeCommand).toString().trim();
+                  if (durationOutput) {
+                    videoDuration = Math.round(parseFloat(durationOutput));
+                  }
+                } catch (ffprobeError) {
+                  console.error(`[處理中] ⚠️ 無法獲取影片時長，使用預設值:`, ffprobeError);
+                }
+
+                await storage.updateGeneratedContent(parseInt(contentId, 10), {
+                  status: "completed",
+                  outputPath: `/videos/${newVideoName}`,
+                  duration: videoDuration,
+                });
+                console.log(`[處理中] ✅ 資料庫狀態已更新: ${contentId} -> completed`);
+
+                // Clean up temp video file
+                await fs.remove(tempVideoPath);
+                console.log(`[處理中] 🧹 已清理臨時影片檔案: ${tempVideoPath}`);
+
+                // Finalize the successful response
+                face2faceResult.data.status = 2;
+                face2faceResult.data.result = resultFileName;
+                face2faceResult.data.video_url = `/videos/${newVideoName}`;
+                face2faceResult.data.local_path = localVideoPath;
+                face2faceResult.msg = "任務已完成";
               }
-              
             } catch (error) {
-              console.error('處理結果檔案失敗:', error);
+              console.error(`[錯誤] 處理已完成的任務 ${taskCode} 失敗:`, error);
+              // Let it poll again
             }
           }
         }

@@ -39,7 +39,7 @@ services:
     container_name: heygem-tts
     restart: unless-stopped
     ports:
-      - "18180:8080"
+      - "${TTS_FISH_PORT:-18180}:8080"
     # 移除過時的 voice 目錄掛載
     command: /bin/bash -c "/opt/conda/envs/python310/bin/python3 tools/api_server.py --listen 0.0.0.0:8080"
     networks:
@@ -52,7 +52,7 @@ services:
       dockerfile: Dockerfile
     container_name: heygem-tts-services
     ports:
-      - "18200:8080"  # 主入口
+      - "${TTS_CUSTOM_PORT:-18200}:8080"  # 主入口
       - "18201:8081"  # TTS 服務 1
       - "18202:8082"  # TTS 服務 2
       - "18203:8083"  # TTS 服務 3
@@ -77,7 +77,7 @@ services:
     privileged: true
     working_dir: /workspace/FunASR/runtime
     ports:
-      - "10095:10095"
+      - "${ASR_PORT:-10095}:10095"
     command: sh /run.sh
     deploy:
       resources:
@@ -98,7 +98,7 @@ services:
     runtime: nvidia
     privileged: true
     ports:
-      - "8383:8383"
+      - "${FACE2FACE_PORT:-8383}:8383"
     environment:
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     volumes:
@@ -118,8 +118,8 @@ services:
     image: nginx:alpine
     container_name: heygem-nginx
     ports:
-      - "80:80"
-      - "8883:8883"
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-8883}:8883"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
     networks:

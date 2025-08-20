@@ -2,8 +2,6 @@
 
 一個整合了現代化前端界面和強大後端功能的 AI 數字人生成平台，支援多 TTS 服務、影片生成和模特管理。
 
-> 📋 **專案結構說明**: 詳細的目錄結構和開發指南請參考 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
-
 ## 🚀 功能特色
 
 ### 前端界面
@@ -59,14 +57,14 @@ HeyGem Platform
 
 ### AI 服務
 - **Fish Speech** - 語音合成
+- **EdgeTTS** - 微軟免費語音服務
+- **VoAI** - 網際智慧中文語音
 - **Face2Face** - 影片生成
-- **CUDA** - GPU 加速
+- **Fun ASR** - 語音識別
 
 ### 基礎設施
 - **Docker** - 容器化部署
-- **Redis** - 快取和任務隊列
-- **PostgreSQL** - 數據持久化 (可選)
-- **Nginx** - 反向代理 (生產環境)
+- **Nginx** - 反向代理和負載平衡
 
 ## 📦 快速開始
 
@@ -93,10 +91,9 @@ npm run dev
 ```
 
 3. **訪問應用**
-- Web 界面: http://localhost:5000
+- Web 界面: http://localhost:80
 - TTS API: http://localhost:18180
-- Redis: http://localhost:6379
-- PostgreSQL: http://localhost:5432
+- 自定義 TTS 服務: http://localhost:18200
 
 ### 生產環境
 
@@ -128,16 +125,11 @@ PORT=5000
 
 # AI 服務 URL
 TTS_URL=http://tts-server:18180
-FACE2FACE_URL=http://face2face-server:8383/easy
+MY_TTS_URL=http://heygem-tts-services:8080
 ASR_URL=http://asr-server:10095
 
-# 數據庫配置 (可選)
-POSTGRES_DB=heygem
-POSTGRES_USER=heygem_user
-POSTGRES_PASSWORD=heygem_password
-
-# Redis 配置
-REDIS_URL=redis://redis:6379
+# TTS 服務 API Keys
+VOAI_API_KEY=your_voai_api_key_here
 ```
 
 ### 文件清理配置

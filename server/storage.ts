@@ -369,6 +369,17 @@ export class JsonStorage implements IStorage {
   private videosPath = path.join(process.cwd(), 'data', 'database', 'videos.json');
   private usersPath = path.join(process.cwd(), 'data', 'database', 'users.json');
 
+  // Helper to read all models without filtering
+  private async _readAllModels(): Promise<Model[]> {
+    try {
+      const data = await fs.readJson(this.modelsPath);
+      return data.models || [];
+    } catch (error) {
+      // If the file doesn't exist or is invalid, return an empty array
+      return [];
+    }
+  }
+
   async getUser(id: number): Promise<User | undefined> {
     const users = await this.getUsers();
     return users.find(u => u.id === id);
@@ -484,8 +495,7 @@ export class JsonStorage implements IStorage {
 
   async getModels(userId?: string, userRole?: string): Promise<Model[]> {
     try {
-      const data = await fs.readJson(this.modelsPath);
-      let models = data.models || [];
+      let models = await this._readAllModels();
       
       if (userId) {
         if (userRole === "admin") {
@@ -515,12 +525,12 @@ export class JsonStorage implements IStorage {
   }
 
   async getModel(id: number | string): Promise<Model | undefined> {
-    const models = await this.getModels();
+    const models = await this._readAllModels();
     return models.find(m => m.id === id.toString() || m.id === id);
   }
 
   async createModel(insertModel: InsertModel): Promise<Model> {
-    const models = await this.getModels();
+    const models = await this._readAllModels();
     const newModel: Model = {
       ...insertModel,
       userId: insertModel.userId || "global", // 默認為 global
@@ -534,7 +544,7 @@ export class JsonStorage implements IStorage {
   }
 
   async updateModel(id: number | string, updates: Partial<Model>): Promise<Model | undefined> {
-    const models = await this.getModels();
+    const models = await this._readAllModels();
     const index = models.findIndex(m => m.id === id.toString() || m.id === id);
     if (index === -1) return undefined;
     
@@ -544,7 +554,7 @@ export class JsonStorage implements IStorage {
   }
 
   async deleteModel(id: number | string): Promise<boolean> {
-    const models = await this.getModels();
+    const models = await this._readAllModels();
     const index = models.findIndex(m => m.id === id.toString() || m.id === id);
     if (index === -1) return false;
     
