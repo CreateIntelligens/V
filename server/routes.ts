@@ -561,6 +561,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // 模特編輯（名稱等基本資訊）
+  app.patch("/api/models/:id", async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { name, description, userId } = req.body;
+      
+      // 先獲取模特資訊檢查權限
+      console.log(`📝 嘗試編輯模型 ID: ${id}`);
+      const model = await storage.getModel(id);
+      if (!model) {
+        console.error(`❌ 模型不存在: ${id}`);
+        return res.status(404).json({
+          success: false,
+          message: "模特不存在",
+          error: "Model not found"
+        });
+      }
+      
+      // 檢查編輯權限（只有擁有者或管理員可以編輯）
+      if (userId !== "ai360" && model.userId !== userId) {
+        console.error(`❌ 無權限編輯模型: 用戶 ${userId} 嘗試編輯 ${model.userId} 的模型`);
+        return res.status(403).json({
+          success: false,
+          message: "無權限編輯此模特",
+          error: "Permission denied"
+        });
+      }
+      
+      // 準備更新數據
+      const updateData: any = {};
+      if (name && name.trim()) updateData.name = name.trim();
+      if (description !== undefined) updateData.description = description;
+      
+      const updated = await storage.updateModel(id, updateData);
+      if (!updated) {
+        return res.status(404).json({ 
+          success: false,
+          message: "模特不存在",
+          error: "Model not found" 
+        });
+      }
+      
+      console.log(`✅ 模型已更新: ${id} - ${JSON.stringify(updateData)}`);
+      res.json({
+        success: true,
+        message: "模特資訊已更新",
+        data: updated
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "An unknown error occurred";
+      console.error(`❌ 編輯模型失敗: ${message}`);
+      res.status(500).json({ 
+        success: false,
+        message: "編輯失敗",
+        error: message 
+      });
+    }
+  });
+
   // File upload route
   app.post("/api/upload", upload.array('files'), async (req: any, res) => {
     try {

@@ -62,7 +62,7 @@ export function ModelGrid({ models }: ModelGridProps) {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/models", currentUser] });
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
       toast({
         title: "操作成功",
         description: data.message,
@@ -88,6 +88,41 @@ export function ModelGrid({ models }: ModelGridProps) {
       id: model.id.toString(),
       isShared: !model.isShared
     });
+  };
+
+  // 編輯模型名稱
+  const editModelMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const response = await apiRequest("PATCH", `/api/models/${id}`, { 
+        name,
+        userId: currentUser?.username
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/models"] });
+      toast({
+        title: "修改成功",
+        description: `模型名稱已更新為 "${data.data.name}"`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "修改失敗",
+        description: "請稍後重試",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditModel = (model: Model) => {
+    const newName = prompt("輸入新名稱:", model.name);
+    if (newName && newName.trim() && newName !== model.name) {
+      editModelMutation.mutate({
+        id: model.id.toString(),
+        name: newName.trim()
+      });
+    }
   };
 
   // 音頻播放控制
@@ -192,9 +227,19 @@ export function ModelGrid({ models }: ModelGridProps) {
                         <Users className={`h-4 w-4 ${model.isShared ? "fill-current" : ""}`} />
                       </Button>
                     )}
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-600">
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    {/* 編輯按鈕：只有模型擁有者或管理員可以編輯 */}
+                    {(currentUser?.username === "ai360" || 
+                      (currentUser?.username && model.userId === currentUser.username)) && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleEditModel(model)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title="編輯名稱"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button 
                       variant="ghost" 
                       size="sm" 
